@@ -30,6 +30,8 @@ Expected local output:
 
 For the hosted demo, use the Devpost judge access key. After login, the runtime badges should make it clear whether Gemini, Phoenix OTEL, and Phoenix MCP are live or skipped/replay.
 
+Hosted liveness uses `/health` or `/api/auth/status`. The container also exposes `/healthz`, but Google Cloud Run reserves some public URL paths ending in `z`, so the exact hosted `/healthz` path can return a Google Frontend 404 before the request reaches TraceGuard.
+
 ## Workflow Map
 
 This is the project at a glance. The important bit is that deterministic security logic produces the findings first; Gemini can summarize those findings, but it is not allowed to invent them.

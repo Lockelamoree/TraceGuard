@@ -22,7 +22,16 @@ from .config import RuntimeConfig
 
 ROOT = Path(__file__).resolve().parent.parent
 WEB_ROOT = ROOT / "web"
-PUBLIC_GET_PATHS = {"/", "/index.html", "/styles.css", "/app.js", "/favicon.ico", "/healthz", "/api/auth/status"}
+PUBLIC_GET_PATHS = {
+    "/",
+    "/index.html",
+    "/styles.css",
+    "/app.js",
+    "/favicon.ico",
+    "/health",
+    "/healthz",
+    "/api/auth/status",
+}
 PUBLIC_POST_PATHS = {"/api/auth/login", "/api/auth/logout"}
 LOGIN_FAILURE_LIMIT = 8
 LOGIN_WINDOW_SECONDS = 5 * 60
@@ -36,7 +45,7 @@ class TraceGuardHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         path = unquote(self.path.split("?", 1)[0])
-        if path == "/healthz":
+        if path in {"/health", "/healthz"}:
             self._send(200, b"ok", "text/plain")
             return
         if path == "/api/auth/status":

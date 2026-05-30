@@ -43,6 +43,8 @@ class TraceGuardAuthServerTests(unittest.TestCase):
 
     def test_protected_routes_require_signed_session(self) -> None:
         self.assertEqual(self.request("/")[0], 200)
+        self.assertEqual(self.request("/health")[0], 200)
+        self.assertEqual(self.request("/healthz")[0], 200)
         self.assertEqual(self.request("/api/auth/status")[0], 200)
         self.assertEqual(self.request("/api/runtime")[0], 401)
         self.assertEqual(self.request("/sample")[0], 401)

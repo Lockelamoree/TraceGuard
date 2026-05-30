@@ -38,7 +38,8 @@ Use the private Devpost judge key if the hosted app prompts for access.
 Suggested checks:
 
 - `/` returns the TraceGuard UI.
-- `/healthz` returns `ok`.
+- `/health` returns `ok` on the hosted Cloud Run URL.
+- Local/container `/healthz` returns `ok`; Cloud Run's public `run.app` URL reserves some paths ending in `z`, so hosted `/healthz` can return a Google Frontend 404 before it reaches the container.
 - `/api/auth/status` reports auth enabled and authenticated after login.
 - Runtime badges clearly identify whether Gemini, Phoenix OTEL, and Phoenix MCP are live or replay/skipped.
 - If Phoenix MCP is live, the runtime detail reports discovered tools and read-only `list-projects` / `list-traces` query status.

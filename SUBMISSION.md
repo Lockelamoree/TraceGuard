@@ -111,7 +111,7 @@ For hosted deployment, configure:
 
 The production image preinstalls `@arizeai/phoenix-mcp@4.0.13`; local experiments can still use `npx -y @arizeai/phoenix-mcp@4.0.13`.
 
-`PHOENIX_API_KEY` is mounted from Google Secret Manager in Cloud Run. The production image includes Node/npm for the pinned Phoenix MCP command, runs as a non-root user, and exposes `/healthz`. The app returns runtime status without exposing secret values or command-line values.
+`PHOENIX_API_KEY` is mounted from Google Secret Manager in Cloud Run. The production image includes Node/npm for the pinned Phoenix MCP command, runs as a non-root user, and exposes `/healthz` for local/container checks plus `/health` for the hosted Cloud Run URL. Google documents some Cloud Run paths ending in `z` as reserved, so the public demo uses `/health` and `/api/auth/status` for external liveness. The app returns runtime status without exposing secret values or command-line values.
 
 ## Demo Video Script
 
