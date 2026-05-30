@@ -186,6 +186,10 @@ class TraceGuardAgentTests(unittest.TestCase):
             observability._ensure_phoenix_client_headers()
             self.assertEqual(os.environ["PHOENIX_CLIENT_HEADERS"], "x=y")
 
+    def test_phoenix_cloud_root_endpoint_is_not_marked_live(self) -> None:
+        self.assertTrue(observability._phoenix_cloud_root_endpoint("https://app.phoenix.arize.com/"))
+        self.assertFalse(observability._phoenix_cloud_root_endpoint("https://app.phoenix.arize.com/s/demo"))
+
     def test_local_phoenix_introspection_is_explicitly_demo_replay(self) -> None:
         result = analyze_bundle("{}", "improved")
         detail = next(step["detail"] for step in result["steps"] if step["name"] == "Phoenix MCP introspection")
@@ -361,6 +365,51 @@ class TraceGuardAgentTests(unittest.TestCase):
         self.assertEqual(result.status, "discovery_only")
         self.assertEqual(result.queried_tool_names, ())
         self.assertIn("authentication page", result.query_error)
+
+    def test_phoenix_mcp_can_run_when_otel_export_is_not_ready(self) -> None:
+        context = TraceContext(
+            run_id="run-1",
+            phoenix_project="traceguard-hackathon",
+            phoenix_enabled=True,
+            phoenix_collector_endpoint="https://app.phoenix.arize.com",
+            mcp_server="@arizeai/phoenix-mcp",
+            tracing_ready=False,
+            tracing_error="collector endpoint needs Phoenix Cloud space hostname",
+        )
+        config = RuntimeConfig(
+            google_cloud_project="traceguard-prod",
+            google_cloud_location="us-central1",
+            google_genai_use_vertexai=True,
+            gemini_model="gemini-2.5-flash",
+            enable_gemini_synthesis=True,
+            phoenix_project_name="traceguard-hackathon",
+            phoenix_base_url="https://app.phoenix.arize.com",
+            phoenix_collector_endpoint="https://app.phoenix.arize.com",
+            phoenix_api_key_configured=True,
+            phoenix_mcp_server="@arizeai/phoenix-mcp",
+            phoenix_mcp_command="phoenix-mcp",
+            phoenix_mcp_timeout_seconds=1,
+            traceguard_auth_configured=True,
+            traceguard_auth_session_seconds=3600,
+        )
+        stdout = (
+            mcp_frame({"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": "2024-11-05"}})
+            + mcp_frame({"jsonrpc": "2.0", "id": 2, "result": {"tools": [{"name": "list-traces"}]}})
+            + mcp_frame(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 3,
+                    "result": {"content": [{"type": "text", "text": json.dumps({"traces": []})}]},
+                }
+            )
+        )
+
+        with patch("traceguard.phoenix_mcp.subprocess.Popen", return_value=FakeMcpProcess(stdout)):
+            result = inspect_phoenix_mcp(context, improved=True, config=config)
+
+        self.assertEqual(result.status, "ok")
+        self.assertEqual(result.queried_tool_names, ("list-traces",))
+        self.assertIn("OTEL is not live", result.summary)
 
     def test_phoenix_mcp_rejects_unpinned_npx_package(self) -> None:
         context = TraceContext(

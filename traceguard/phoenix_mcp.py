@@ -83,7 +83,7 @@ def inspect_phoenix_mcp(
             ),
         )
 
-    if not context.tracing_ready:
+    if not context.tracing_ready and not runtime.phoenix_mcp_command:
         detail = f": {context.tracing_error}" if context.tracing_error else "."
         return PhoenixMcpResult(
             status="tracing_not_ready",
@@ -94,6 +94,10 @@ def inspect_phoenix_mcp(
             ),
             error=context.tracing_error,
         )
+    otel_note = ""
+    if not context.tracing_ready:
+        otel_detail = context.tracing_error or "not ready"
+        otel_note = f" Phoenix OTEL is not live yet ({otel_detail}); MCP uses the Phoenix API separately."
 
     if not runtime.phoenix_mcp_command:
         return PhoenixMcpResult(
@@ -132,13 +136,14 @@ def inspect_phoenix_mcp(
         summary = (
             f"Phoenix MCP query succeeded against {context.mcp_server}: initialized an MCP session, discovered "
             f"{len(tool_names)} tools ({preview}{extra}), and queried read-only Phoenix data ({query_bits})."
+            f"{otel_note}"
         )
         status = "ok"
     else:
         query_detail = f" Read-only trace/eval query did not complete: {inspection.query_error}." if inspection.query_error else ""
         summary = (
             f"Phoenix MCP discovery succeeded against {context.mcp_server}: initialized an MCP session and discovered "
-            f"{len(tool_names)} tools ({preview}{extra}).{query_detail}"
+            f"{len(tool_names)} tools ({preview}{extra}).{query_detail}{otel_note}"
         )
         status = "discovery_only"
     return PhoenixMcpResult(

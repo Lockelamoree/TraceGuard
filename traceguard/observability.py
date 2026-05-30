@@ -138,6 +138,13 @@ def _initialize_phoenix(config: RuntimeConfig) -> None:
     if _TRACING_ATTEMPTED:
         return
     _TRACING_ATTEMPTED = True
+    if _phoenix_cloud_root_endpoint(config.phoenix_collector_endpoint):
+        _TRACING_READY = False
+        _TRACING_ERROR = (
+            "Phoenix Cloud OTEL export needs the space-specific PHOENIX_COLLECTOR_ENDPOINT "
+            "for this API key; the generic app.phoenix.arize.com endpoint is only marked configured."
+        )
+        return
     try:
         from opentelemetry import trace
         from phoenix.otel import register
@@ -159,3 +166,8 @@ def _ensure_phoenix_client_headers() -> None:
     api_key = os.getenv("PHOENIX_API_KEY", "").strip()
     if api_key:
         os.environ["PHOENIX_CLIENT_HEADERS"] = f"api_key={api_key}"
+
+
+def _phoenix_cloud_root_endpoint(endpoint: str) -> bool:
+    normalized = endpoint.strip().rstrip("/")
+    return normalized == "https://app.phoenix.arize.com"
