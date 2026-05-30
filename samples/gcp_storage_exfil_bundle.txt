@@ -1,0 +1,75 @@
+ALERT severity=critical source=cloud-siem rule="gcp_storage_credential_exfil_chain" message="Credential token used from impossible travel location, followed by large object reads from customer-export bucket and unusual egress to external ASN"
+ALERT severity=high source=dlp message="Possible storage exfil from gs://customer-export-prod after GenerateAccessToken event"
+
+{
+  "bindings": [
+    {
+      "role": "roles/storage.admin",
+      "members": ["serviceAccount:etl-runner@traceguard-demo.iam.gserviceaccount.com"]
+    },
+    {
+      "role": "roles/owner",
+      "members": ["user:breakglass-temp@example.com"]
+    },
+    {
+      "role": "roles/storage.objectViewer",
+      "members": ["allUsers"]
+    }
+  ]
+}
+
+{
+  "protoPayload": {
+    "methodName": "SetIamPolicy",
+    "authenticationInfo": {
+      "principalEmail": "breakglass-temp@example.com"
+    },
+    "resourceName": "projects/traceguard-demo/buckets/customer-export-prod"
+  },
+  "resource": {
+    "type": "gcs_bucket",
+    "labels": {
+      "bucket_name": "customer-export-prod",
+      "project_id": "traceguard-demo"
+    }
+  }
+}
+
+{
+  "protoPayload": {
+    "methodName": "GenerateAccessToken",
+    "authenticationInfo": {
+      "principalEmail": "contractor-ci@example.net"
+    },
+    "resourceName": "projects/-/serviceAccounts/etl-runner@traceguard-demo.iam.gserviceaccount.com"
+  }
+}
+
+{
+  "protoPayload": {
+    "methodName": "serviceAccountKeys.create",
+    "authenticationInfo": {
+      "principalEmail": "breakglass-temp@example.com"
+    },
+    "resourceName": "projects/traceguard-demo/serviceAccounts/etl-runner@traceguard-demo.iam.gserviceaccount.com"
+  }
+}
+
+resource "google_storage_bucket_iam_member" "public_customer_export_reader" {
+  bucket = "customer-export-prod"
+  role   = "roles/storage.objectViewer"
+  member = "allUsers"
+}
+
+resource "google_compute_firewall" "temporary_export_debug" {
+  name          = "temporary-export-debug"
+  network       = "default"
+  source_ranges = ["0.0.0.0/0"]
+  allow {
+    protocol = "tcp"
+    ports    = ["22", "443"]
+  }
+}
+
+branch protection: disabled for customer-data-pipeline
+secret scanning: disabled for customer-data-pipeline

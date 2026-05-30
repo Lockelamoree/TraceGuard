@@ -1,0 +1,3 @@
+google-genai==1.72.0
+arize-phoenix-otel==0.16.1
+google-adk==1.34.1

@@ -1,0 +1,50 @@
+ALERT severity=high source=siem message="Credential token used from unusual ASN followed by possible storage exfil"
+
+{
+  "bindings": [
+    {
+      "role": "roles/owner",
+      "members": ["user:temporary-admin@example.com"]
+    },
+    {
+      "role": "roles/run.invoker",
+      "members": ["allUsers"]
+    }
+  ]
+}
+
+{
+  "protoPayload": {
+    "methodName": "SetIamPolicy",
+    "authenticationInfo": {
+      "principalEmail": "temporary-admin@example.com"
+    },
+    "resourceName": "projects/traceguard-demo/serviceAccounts/deploy-bot@traceguard-demo.iam.gserviceaccount.com"
+  }
+}
+
+{
+  "protoPayload": {
+    "methodName": "GenerateAccessToken",
+    "authenticationInfo": {
+      "principalEmail": "external-ci@example.net"
+    },
+    "resourceName": "projects/-/serviceAccounts/deploy-bot@traceguard-demo.iam.gserviceaccount.com"
+  }
+}
+
+resource "google_cloud_run_service_iam_member" "public_invoker" {
+  service  = "incident-admin-api"
+  role     = "roles/run.invoker"
+  member   = "allUsers"
+}
+
+resource "google_compute_firewall" "temporary_admin" {
+  name    = "temporary-admin-debug"
+  network = "default"
+  source_ranges = ["0.0.0.0/0"]
+}
+
+branch protection: disabled for main
+secret scanning: disabled for incident-admin-api
+

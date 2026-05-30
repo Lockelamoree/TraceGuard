@@ -1,0 +1,37 @@
+INFO source=change-management message="Approved deployment completed for traceguard-demo analytics worker"
+
+{
+  "bindings": [
+    {
+      "role": "roles/logging.viewer",
+      "members": ["group:security-analysts@example.com"]
+    },
+    {
+      "role": "roles/monitoring.viewer",
+      "members": ["serviceAccount:observability-reader@traceguard-demo.iam.gserviceaccount.com"]
+    }
+  ]
+}
+
+{
+  "protoPayload": {
+    "methodName": "google.cloud.run.v2.Services.GetService",
+    "authenticationInfo": {
+      "principalEmail": "release-manager@example.com"
+    },
+    "resourceName": "projects/traceguard-demo/locations/us-central1/services/analytics-worker"
+  }
+}
+
+resource "google_compute_firewall" "internal_health_checks" {
+  name          = "internal-health-checks"
+  network       = "default"
+  source_ranges = ["10.20.0.0/16"]
+  allow {
+    protocol = "tcp"
+    ports    = ["443"]
+  }
+}
+
+branch protection: enabled for analytics-worker
+secret scanning: enabled for analytics-worker

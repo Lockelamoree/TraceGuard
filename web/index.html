@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TraceGuard</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <section id="authGate" class="auth-gate hidden">
+      <form id="authForm" class="auth-panel">
+        <p class="eyebrow">TraceGuard production access</p>
+        <h1>Access Key</h1>
+        <label for="authToken">Key</label>
+        <input id="authToken" name="authToken" type="password" autocomplete="current-password" required />
+        <button class="primary" type="submit">Unlock</button>
+        <div id="authMessage" class="auth-message" role="status"></div>
+      </form>
+    </section>
+
+    <main id="appShell" class="shell hidden">
+      <section class="workbench">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Arize track - Google Cloud Rapid Agent Hackathon</p>
+            <h1>TraceGuard</h1>
+            <p class="subtitle">Cloud security triage that keeps every confirmed claim tied to evidence.</p>
+          </div>
+          <div class="topbar-actions">
+            <div class="status-pill" id="runtimeStatus">Checking runtime...</div>
+            <button id="logoutButton" class="secondary hidden" type="button">Lock</button>
+          </div>
+        </header>
+
+        <div class="grid">
+          <section class="panel input-panel">
+            <div class="panel-header">
+              <h2>Evidence Bundle</h2>
+              <div class="actions">
+                <button id="loadSample" type="button">Load sample</button>
+                <button id="runBaseline" type="button">Baseline</button>
+                <button id="runImproved" class="primary" type="button">Run agent</button>
+              </div>
+            </div>
+            <textarea id="evidence" spellcheck="false" placeholder="Paste GCP audit logs, IAM policy JSON, Terraform snippets, alert text, or repo metadata here."></textarea>
+          </section>
+
+          <section class="panel console-panel">
+            <div class="panel-header">
+              <h2>Agent Run Console</h2>
+              <button id="copyReport" type="button" disabled>Copy report</button>
+            </div>
+            <div id="summary" class="summary">Load the sample bundle, then compare baseline and improved triage.</div>
+            <div id="runtimeDetail" class="summary compact">Runtime detail appears after a run. Local mode uses deterministic triage without claiming live Gemini or Phoenix telemetry.</div>
+            <div id="geminiBrief" class="summary compact">Gemini synthesis appears here only when the live Vertex AI call succeeds.</div>
+            <div id="steps" class="steps"></div>
+          </section>
+        </div>
+
+        <section class="results">
+          <div class="panel">
+            <div class="panel-header">
+              <h2>Baseline vs Improved</h2>
+              <span id="deltaStatus" class="muted">Waiting for runs</span>
+            </div>
+            <div id="deltaPanel" class="delta-panel"></div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-header">
+              <h2>Final Report Preview</h2>
+              <span id="reportStatus" class="muted">No report yet</span>
+            </div>
+            <pre id="reportPreview" class="report-preview">Run the improved agent to preview the generated markdown report here.</pre>
+          </div>
+
+          <div class="panel">
+            <div class="panel-header">
+              <h2>Findings</h2>
+              <span id="findingCount" class="muted">0 findings</span>
+            </div>
+            <div id="findings" class="finding-list"></div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-header">
+              <h2>Quality Evals</h2>
+              <span class="muted">Grounding and report checks</span>
+            </div>
+            <div id="evals" class="eval-list"></div>
+          </div>
+        </section>
+      </section>
+    </main>
+    <script src="/app.js"></script>
+  </body>
+</html>

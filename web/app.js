@@ -1,0 +1,452 @@
+const evidence = document.querySelector("#evidence");
+const summary = document.querySelector("#summary");
+const runtimeDetail = document.querySelector("#runtimeDetail");
+const geminiBrief = document.querySelector("#geminiBrief");
+const steps = document.querySelector("#steps");
+const findings = document.querySelector("#findings");
+const evals = document.querySelector("#evals");
+const findingCount = document.querySelector("#findingCount");
+const deltaStatus = document.querySelector("#deltaStatus");
+const deltaPanel = document.querySelector("#deltaPanel");
+const reportStatus = document.querySelector("#reportStatus");
+const reportPreview = document.querySelector("#reportPreview");
+const copyReportButton = document.querySelector("#copyReport");
+const runtimeStatus = document.querySelector("#runtimeStatus");
+const authGate = document.querySelector("#authGate");
+const appShell = document.querySelector("#appShell");
+const authForm = document.querySelector("#authForm");
+const authToken = document.querySelector("#authToken");
+const authMessage = document.querySelector("#authMessage");
+const logoutButton = document.querySelector("#logoutButton");
+let lastReport = "";
+const runState = {
+  evidenceText: "",
+  baseline: null,
+  improved: null,
+};
+const actionButtons = ["#loadSample", "#runBaseline", "#runImproved"]
+  .map((selector) => document.querySelector(selector));
+
+renderDelta();
+renderReportPreview("");
+initialize();
+
+document.querySelector("#loadSample").addEventListener("click", async () => {
+  const response = await fetchWithAuth("/sample");
+  if (!response) return;
+  evidence.value = await response.text();
+  resetRunState();
+  summary.textContent = "Sample loaded. Run the improved agent to capture the baseline and improved delta.";
+});
+
+document.querySelector("#runBaseline").addEventListener("click", () => runAgent("baseline"));
+document.querySelector("#runImproved").addEventListener("click", () => runAgent("improved"));
+evidence.addEventListener("input", resetRunState);
+copyReportButton.addEventListener("click", async () => {
+  if (!lastReport) return;
+  await navigator.clipboard.writeText(lastReport);
+  summary.textContent = "Report copied.";
+});
+authForm.addEventListener("submit", login);
+logoutButton.addEventListener("click", logout);
+
+async function runAgent(mode) {
+  ensureRunStateForEvidence();
+  setBusy(true);
+  try {
+    if (mode === "improved" && !runState.baseline) {
+      summary.textContent = "Running baseline comparison first...";
+      const baseline = await requestAnalysis("baseline");
+      if (!baseline) return;
+      rememberRun(baseline);
+      renderDelta();
+    }
+
+    summary.textContent = mode === "baseline" ? "Running baseline triage..." : "Running improved triage...";
+    const result = await requestAnalysis(mode);
+    if (!result) return;
+    render(result);
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function requestAnalysis(mode) {
+  const response = await fetchWithAuth("/api/analyze", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ evidence_text: evidence.value, mode }),
+  });
+  if (!response) return null;
+  const result = await response.json().catch(() => ({ error: "Agent returned invalid JSON." }));
+  if (!response.ok || result.error) {
+    summary.textContent = result.error || "Agent run failed.";
+    return null;
+  }
+  return result;
+}
+
+async function initialize() {
+  try {
+    const status = await fetch("/api/auth/status").then((response) => response.json());
+    if (status.enabled && !status.authenticated) {
+      showAuthGate("");
+      return;
+    }
+    showApp(status.enabled);
+    await loadRuntimeStatus();
+  } catch {
+    showApp(false);
+    runtimeStatus.textContent = "Runtime status unavailable";
+  }
+}
+
+async function login(event) {
+  event.preventDefault();
+  authMessage.textContent = "Checking key...";
+  const response = await fetch("/api/auth/login", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ token: authToken.value }),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || !result.authenticated) {
+    authMessage.textContent = result.error || "Invalid access key.";
+    authToken.select();
+    return;
+  }
+  authToken.value = "";
+  authMessage.textContent = "";
+  showApp(result.enabled);
+  await loadRuntimeStatus();
+}
+
+async function logout() {
+  await fetch("/api/auth/logout", { method: "POST" });
+  showAuthGate("Locked.");
+}
+
+async function fetchWithAuth(url, options) {
+  const response = await fetch(url, options);
+  if (response.status === 401) {
+    showAuthGate("Session expired.");
+    return null;
+  }
+  return response;
+}
+
+function showAuthGate(message) {
+  appShell.classList.add("hidden");
+  authGate.classList.remove("hidden");
+  logoutButton.classList.add("hidden");
+  authMessage.textContent = message;
+  window.setTimeout(() => authToken.focus(), 0);
+}
+
+function showApp(authEnabled) {
+  authGate.classList.add("hidden");
+  appShell.classList.remove("hidden");
+  logoutButton.classList.toggle("hidden", !authEnabled);
+}
+
+async function loadRuntimeStatus() {
+  try {
+    const response = await fetchWithAuth("/api/runtime");
+    if (!response) return;
+    const status = await response.json();
+    const geminiState = status.enable_gemini_synthesis && status.google_cloud_project ? "Gemini configured" : "Gemini local deterministic";
+    const phoenixState = status.phoenix_api_key_configured || status.phoenix_collector_endpoint ? "Phoenix configured" : "Phoenix local trace context";
+    const mcpState = status.phoenix_mcp_command_configured ? "MCP command ready" : "MCP command unset";
+    const authState = status.traceguard_auth_configured ? "Auth on" : "Auth local-off";
+    runtimeStatus.textContent = `${authState} | ${geminiState} | ${phoenixState} | ${mcpState}`;
+    runtimeDetail.textContent = [
+      status.enable_gemini_synthesis && status.google_cloud_project
+        ? "Gemini is configured; live synthesis is confirmed only after a successful run."
+        : "Gemini is not live; deterministic local findings and reports are still produced.",
+      status.phoenix_api_key_configured || status.phoenix_collector_endpoint
+        ? "Phoenix config is present; hosted trace delivery is confirmed only when a run reports OTEL live."
+        : "Phoenix is not configured; the UI shows local trace context and eval output only.",
+      status.phoenix_mcp_command_configured
+        ? "Phoenix MCP command is configured; read-only tool discovery is attempted when OTEL tracing is live."
+        : "Phoenix MCP command is unset; live MCP queries are skipped instead of being implied.",
+    ].join(" ");
+  } catch {
+    runtimeStatus.textContent = "Runtime status unavailable";
+    runtimeDetail.textContent = "Runtime status unavailable. Local deterministic analysis may still work if the API is reachable.";
+  }
+}
+
+function render(result) {
+  rememberRun(result);
+  lastReport = result.report_markdown || "";
+  renderRuntimeFromResult(result);
+  renderReportPreview(lastReport, result.mode);
+  renderDelta();
+  summary.textContent = `${result.summary} Run mode: ${result.mode}.`;
+  geminiBrief.innerHTML = `
+    <strong>${escapeHtml(result.gemini?.provider || "Google Cloud Gemini")}</strong>
+    <div class="detail">${escapeHtml(result.gemini?.detail || "Gemini synthesis not configured.")}</div>
+    ${result.gemini?.text ? `<div class="detail generated">${escapeHtml(result.gemini.text)}</div>` : ""}
+  `;
+  steps.innerHTML = result.steps.map((step) => `
+    <article class="step">
+      <strong>${escapeHtml(step.name)} - ${escapeHtml(step.status)}</strong>
+      <div class="detail">${escapeHtml(step.detail)}</div>
+    </article>
+  `).join("");
+  findingCount.textContent = `${result.findings.length} findings`;
+  findings.innerHTML = result.findings.map((finding) => `
+    <article class="finding">
+      <strong><span class="${finding.severity}">${finding.severity.toUpperCase()}</span> - ${escapeHtml(finding.title)}</strong>
+      <div class="meta">
+        <span class="badge">confidence ${Math.round(finding.confidence * 100)}%</span>
+        <span class="badge">score ${finding.score}</span>
+        <span class="badge">${escapeHtml(finding.cwe)}</span>
+        <span class="badge">evidence ${finding.evidence_ids.join(", ")}</span>
+      </div>
+      <div class="detail">${escapeHtml(finding.impact)}</div>
+      <div class="detail"><strong>Fix</strong>: ${escapeHtml(finding.remediation)}</div>
+      <div class="detail"><strong>Detect</strong>: ${escapeHtml(finding.detection)}</div>
+    </article>
+  `).join("") || `<div class="detail">No confirmed findings. Treat that as inconclusive, not automatically clean.</div>`;
+  evals.innerHTML = result.evals.map((item) => `
+    <article class="eval">
+      <strong><span class="${item.status}">${item.status.toUpperCase()}</span> - ${escapeHtml(item.name)}</strong>
+      <div class="meta"><span class="badge">score ${item.score}</span></div>
+      <div class="detail">${escapeHtml(item.detail)}</div>
+    </article>
+  `).join("");
+}
+
+function resetRunState() {
+  runState.evidenceText = evidence.value;
+  runState.baseline = null;
+  runState.improved = null;
+  lastReport = "";
+  renderReportPreview("");
+  renderDelta();
+}
+
+function ensureRunStateForEvidence() {
+  if (runState.evidenceText !== evidence.value) {
+    resetRunState();
+  }
+}
+
+function rememberRun(result) {
+  ensureRunStateForEvidence();
+  if (result.mode === "baseline") {
+    runState.baseline = result;
+  }
+  if (result.mode === "improved") {
+    runState.improved = result;
+  }
+}
+
+function setBusy(isBusy) {
+  actionButtons.forEach((button) => {
+    button.disabled = isBusy;
+  });
+}
+
+function renderRuntimeFromResult(result) {
+  const geminiState = result.gemini?.ok
+    ? "Gemini live"
+    : result.gemini?.enabled
+      ? "Gemini configured, not live"
+      : "Gemini deterministic local";
+  const phoenixState = result.arize?.tracing_ready
+    ? "Phoenix OTEL live"
+    : result.arize?.phoenix_enabled
+      ? "Phoenix configured, not live"
+      : "Phoenix local trace context";
+  const mcpState = result.arize?.mcp?.status === "ok"
+    ? "MCP live"
+    : result.arize?.mcp?.command_configured
+      ? "MCP attempted"
+      : "MCP skipped";
+  runtimeStatus.textContent = `${geminiState} | ${phoenixState} | ${mcpState}`;
+
+  const geminiDetail = result.gemini?.ok
+    ? `Gemini generated a live Vertex AI brief with ${escapeHtml(result.gemini.model || "the configured model")}.`
+    : result.gemini?.enabled
+      ? `Gemini is enabled, but this run did not produce a live brief: ${escapeHtml(result.gemini.detail || "no detail returned")}.`
+      : "Gemini is disabled for this run; report content is deterministic local output.";
+  const phoenixDetail = result.arize?.tracing_ready
+    ? `Phoenix OTEL is live for project ${escapeHtml(result.arize.phoenix_project || "traceguard")}.`
+    : result.arize?.phoenix_enabled
+      ? `Phoenix config is present, but hosted trace delivery was not confirmed${result.arize.tracing_error ? `: ${escapeHtml(result.arize.tracing_error)}` : "."}`
+      : "Phoenix is not configured; showing local trace context and evals only.";
+  const mcpDetail = result.arize?.mcp?.summary
+    ? escapeHtml(result.arize.mcp.summary)
+    : "Phoenix MCP introspection status was not returned.";
+
+  runtimeDetail.innerHTML = `
+    <strong>Runtime</strong>
+    <div class="detail">${geminiDetail}</div>
+    <div class="detail">${phoenixDetail}</div>
+    <div class="detail">${mcpDetail}</div>
+  `;
+}
+
+function renderReportPreview(report, mode = "") {
+  reportPreview.textContent = report || "Run the improved agent to preview the generated markdown report here.";
+  reportStatus.textContent = report ? `${formatMode(mode)} report` : "No report yet";
+  copyReportButton.disabled = !report;
+}
+
+function renderDelta() {
+  const baseline = runState.baseline;
+  const improved = runState.improved;
+
+  if (!baseline && !improved) {
+    deltaStatus.textContent = "Waiting for runs";
+    deltaPanel.innerHTML = `
+      <div class="delta-empty">
+        Run the improved agent to capture a baseline first, then compare finding coverage, risk scoring, and eval quality.
+      </div>
+    `;
+    return;
+  }
+
+  if (!baseline || !improved) {
+    const captured = baseline || improved;
+    deltaStatus.textContent = baseline ? "Improved pending" : "Baseline pending";
+    deltaPanel.innerHTML = `
+      <div class="delta-empty">
+        ${escapeHtml(formatMode(captured.mode))} captured. ${baseline ? "Run improved to complete the delta." : "Run baseline to complete the delta."}
+      </div>
+      <div class="delta-metrics">
+        ${renderSnapshotTile("Findings", captured.findings.length)}
+        ${renderSnapshotTile("Critical/high", countCriticalHigh(captured.findings))}
+        ${renderSnapshotTile("Top score", topRiskScore(captured.findings))}
+        ${renderSnapshotTile("Eval avg", `${Math.round(avgEvalScore(captured.evals) * 100)}%`)}
+      </div>
+    `;
+    return;
+  }
+
+  const baselineMetrics = resultMetrics(baseline);
+  const improvedMetrics = resultMetrics(improved);
+  const improvedOnly = improved.findings.filter((finding) => !findingMap(baseline.findings).has(findingKey(finding)));
+  const baselineByKey = findingMap(baseline.findings);
+  const severityUpgrades = improved.findings.filter((finding) => {
+    const previous = baselineByKey.get(findingKey(finding));
+    return previous && severityRank(finding.severity) > severityRank(previous.severity);
+  });
+  const scoreGains = improved.findings
+    .map((finding) => {
+      const previous = baselineByKey.get(findingKey(finding));
+      return previous ? { finding, delta: Number(finding.score || 0) - Number(previous.score || 0) } : null;
+    })
+    .filter((item) => item && item.delta > 0)
+    .sort((left, right) => right.delta - left.delta)
+    .slice(0, 2);
+
+  deltaStatus.textContent = "Comparison ready";
+  deltaPanel.innerHTML = `
+    <div class="delta-metrics">
+      ${renderDeltaTile("Findings", baselineMetrics.findings, improvedMetrics.findings)}
+      ${renderDeltaTile("Critical/high", baselineMetrics.criticalHigh, improvedMetrics.criticalHigh)}
+      ${renderDeltaTile("Top score", baselineMetrics.topScore, improvedMetrics.topScore)}
+      ${renderDeltaTile("Eval avg", baselineMetrics.avgEval, improvedMetrics.avgEval, (value) => `${Math.round(value * 100)}%`)}
+    </div>
+    <div class="delta-notes">
+      ${renderDeltaNote(
+        "Improved-only coverage",
+        improvedOnly.length
+          ? improvedOnly.map((finding) => `${finding.id} (${finding.severity}, score ${finding.score})`).join("; ")
+          : "No improved-only finding IDs."
+      )}
+      ${renderDeltaNote(
+        "Severity changes",
+        severityUpgrades.length
+          ? severityUpgrades.map((finding) => `${finding.id} moved to ${finding.severity}`).join("; ")
+          : "No severity upgrades across shared evidence IDs."
+      )}
+      ${renderDeltaNote(
+        "Risk score gains",
+        scoreGains.length
+          ? scoreGains.map(({ finding, delta }) => `${finding.id} +${delta}`).join("; ")
+          : "No score gains on shared findings."
+      )}
+    </div>
+  `;
+}
+
+function resultMetrics(result) {
+  return {
+    findings: result.findings.length,
+    criticalHigh: countCriticalHigh(result.findings),
+    topScore: topRiskScore(result.findings),
+    avgEval: avgEvalScore(result.evals),
+  };
+}
+
+function renderSnapshotTile(label, value) {
+  return `
+    <div class="delta-tile">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+    </div>
+  `;
+}
+
+function renderDeltaTile(label, baselineValue, improvedValue, formatter = (value) => value) {
+  const delta = improvedValue - baselineValue;
+  const formattedDelta = delta > 0 ? `+${formatter(delta)}` : formatter(delta);
+  return `
+    <div class="delta-tile">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(formatter(baselineValue))} -> ${escapeHtml(formatter(improvedValue))}</strong>
+      <em class="${delta > 0 ? "positive" : delta < 0 ? "negative" : ""}">${escapeHtml(formattedDelta)}</em>
+    </div>
+  `;
+}
+
+function renderDeltaNote(label, value) {
+  return `
+    <div class="delta-note">
+      <strong>${escapeHtml(label)}</strong>
+      <span>${escapeHtml(value)}</span>
+    </div>
+  `;
+}
+
+function countCriticalHigh(items) {
+  return items.filter((finding) => ["critical", "high"].includes(finding.severity)).length;
+}
+
+function topRiskScore(items) {
+  return items.reduce((max, finding) => Math.max(max, Number(finding.score) || 0), 0);
+}
+
+function avgEvalScore(items) {
+  if (!items.length) return 0;
+  return items.reduce((total, item) => total + (Number(item.score) || 0), 0) / items.length;
+}
+
+function findingMap(items) {
+  return new Map(items.map((finding) => [findingKey(finding), finding]));
+}
+
+function findingKey(finding) {
+  return `${finding.id}:${(finding.evidence_ids || []).join(",")}`;
+}
+
+function severityRank(severity) {
+  return { info: 1, low: 2, medium: 3, high: 4, critical: 5 }[String(severity).toLowerCase()] || 0;
+}
+
+function formatMode(mode) {
+  return mode ? `${mode.charAt(0).toUpperCase()}${mode.slice(1)}` : "Latest";
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}

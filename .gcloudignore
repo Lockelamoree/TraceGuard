@@ -1,0 +1,10 @@
+.git/
+.gcloud/
+.secrets/
+__pycache__/
+*.pyc
+.pytest_cache/
+traceguard-server.log
+.traceguard-server.*.log
+node_modules/
+
