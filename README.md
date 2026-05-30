@@ -52,8 +52,8 @@ flowchart TD
     evals -. "eval scores" .-> phoenixOtel
     phoenixOtel --> phoenix["Phoenix project"]
 
-    triage -. "when tracing and command are configured" .-> mcp["Phoenix MCP stdio client<br/>initialize + tools/list"]
-    mcp -. "read-only introspection" .-> phoenix
+    triage -. "when tracing and command are configured" .-> mcp["Phoenix MCP stdio client<br/>initialize, tools/list, list-projects, list-traces"]
+    mcp -. "read-only trace/project query" .-> phoenix
 ```
 
 I keep the full map in [PROJECT_VISUALIZATION.md](PROJECT_VISUALIZATION.md), including the local-vs-hosted split.
@@ -66,7 +66,7 @@ I keep the full map in [PROJECT_VISUALIZATION.md](PROJECT_VISUALIZATION.md), inc
 | Baseline vs improved delta | Confirmed | Confirmed after authenticated run | This build uses deterministic eval-guided replay, not autonomous online learning. |
 | Gemini synthesis | Disabled by default | Requires `GOOGLE_CLOUD_PROJECT` and `ENABLE_GEMINI_SYNTHESIS=true` | Gemini summarizes deterministic findings; it does not create security facts. |
 | Phoenix OTEL tracing | Local replay by default | Requires `PHOENIX_API_KEY` or `PHOENIX_COLLECTOR_ENDPOINT` | Runtime badges distinguish live tracing from replay. |
-| Phoenix MCP integration | Local replay by default | Requires live tracing and `PHOENIX_MCP_COMMAND` | The current live MCP path verifies `initialize` and `tools/list`. |
+| Phoenix MCP integration | Local replay by default | Requires live tracing and `PHOENIX_MCP_COMMAND` | The live MCP path verifies `initialize` and `tools/list`, then attempts read-only `list-projects` and `list-traces` queries. |
 | Public repo and license | This repository | This repository | MIT license included. |
 
 ## Why I Built It This Way
@@ -138,8 +138,8 @@ Production environment variables:
 - `PHOENIX_COLLECTOR_ENDPOINT`: Phoenix collector endpoint or Phoenix Cloud space URL.
 - `PHOENIX_PROJECT_NAME`: Phoenix project name, defaults to `traceguard-hackathon`.
 - `PHOENIX_MCP_SERVER`: MCP server command/name, defaults to `@arizeai/phoenix-mcp`.
-- `PHOENIX_MCP_COMMAND`: Optional stdio command used for live read-only MCP introspection, for example `npx -y @arizeai/phoenix-mcp@4.0.13`.
-- `PHOENIX_MCP_TIMEOUT_SECONDS`: Timeout for MCP initialize and tool discovery, defaults to 4 seconds.
+- `PHOENIX_MCP_COMMAND`: Optional stdio command used for live read-only MCP introspection. The production image preinstalls `@arizeai/phoenix-mcp@4.0.13`, so `phoenix-mcp` is the preferred Cloud Run value.
+- `PHOENIX_MCP_TIMEOUT_SECONDS`: Timeout for MCP initialize, tool discovery, and read-only trace/project queries, defaults to 4 seconds locally and 12 seconds in deploy scripts.
 - `TRACEGUARD_AUTH_TOKEN`: Shared access key required before sample data, runtime config, or agent runs are available. Store this in Secret Manager.
 - `TRACEGUARD_AUTH_SESSION_SECONDS`: Signed browser session lifetime, defaults to 12 hours.
 
@@ -189,32 +189,37 @@ The production tracing path lives in `traceguard/observability.py`. When `PHOENI
 
 The spans include run mode, evidence count/kinds, finding IDs/severities, eval scores/statuses, Gemini status, MCP status/tool count, and report length. Without Phoenix configuration, the app labels the output as local replay guidance instead of claiming live MCP trace queries.
 
-The live MCP path lives in `traceguard/phoenix_mcp.py`. When OTEL tracing is live and `PHOENIX_MCP_COMMAND` is configured, TraceGuard launches the Phoenix MCP server over stdio, sends a JSON-RPC `initialize`, then performs a read-only `tools/list` call. The API and UI report the MCP result as `ok`, `command_not_configured`, `tracing_not_ready`, `error`, or `local_replay`. The public runtime endpoint exposes only whether a command is configured, not the command value.
+The live MCP path lives in `traceguard/phoenix_mcp.py`. When OTEL tracing is live and `PHOENIX_MCP_COMMAND` is configured, TraceGuard launches the Phoenix MCP server over stdio, sends a JSON-RPC `initialize`, performs `tools/list`, then attempts read-only Phoenix data queries through `list-projects` and `list-traces` when those tools are exposed. The API and UI report the MCP result as `ok`, `discovery_only`, `command_not_configured`, `tracing_not_ready`, `error`, or `local_replay`. The public runtime endpoint exposes only whether a command is configured, not the command value.
 
-For a hosted demo with Node available in the runtime, use:
+For the hosted Cloud Run demo, the Docker image preinstalls the pinned MCP package. Use:
 
 ```powershell
 PHOENIX_BASE_URL=https://app.phoenix.arize.com
-PHOENIX_MCP_COMMAND="npx -y @arizeai/phoenix-mcp@4.0.13"
+PHOENIX_MCP_COMMAND="phoenix-mcp"
+PHOENIX_MCP_TIMEOUT_SECONDS=12
 ```
 
-Keep `PHOENIX_API_KEY` in Secret Manager or the runtime environment instead of putting it in the command line. For defense in depth, TraceGuard rejects unpinned `npx @arizeai/phoenix-mcp@latest` commands and only allows the official pinned Phoenix MCP package or an installed `phoenix-mcp` executable.
+For local experiments without installing the package globally, `npx -y @arizeai/phoenix-mcp@4.0.13` is still allowed. Keep `PHOENIX_API_KEY` in Secret Manager or the runtime environment instead of putting it in the command line. For defense in depth, TraceGuard rejects unpinned `npx @arizeai/phoenix-mcp@latest` commands and only allows the official pinned Phoenix MCP package or an installed `phoenix-mcp` executable.
 
 Expected production instrumentation:
 
 - Instrument Gemini calls with Phoenix/OpenInference-compatible OpenTelemetry.
 - Export traces to Phoenix Cloud.
-- Configure `PHOENIX_MCP_COMMAND` so the app can launch `@arizeai/phoenix-mcp` and verify available Phoenix tools with `tools/list`.
+- Configure `PHOENIX_MCP_COMMAND` so the app can launch `@arizeai/phoenix-mcp`, verify available Phoenix tools with `tools/list`, and query read-only project/trace data when supported.
 - Run evals for evidence grounding, confirmed-claim hygiene, detection usefulness, remediation usefulness, severity calibration, and duplicate pressure.
 
-## ADK / Agent Platform Surface
+## Google Agent Builder / ADK Runtime Surface
+
+The deployed judge UI is a Cloud Run web runtime because it is easy to verify and keeps the security workflow inspectable. The agent surface for Google ADK / Agent Platform lives beside it in `traceguard/adk_agent.py`.
+
+That file exposes `root_agent`, a Google ADK `Agent` when `google-adk` is installed. The ADK agent uses Gemini as its model and has one mandatory tool: `triage_evidence_tool`. The tool runs the same deterministic parser, scoring, and eval pipeline used by the web app. The instruction tells Gemini to call the tool before making security claims, so Agent Builder/ADK orchestration can use Gemini without letting it invent findings.
 
 The web app uses `traceguard/agent.py` for HTTP orchestration. For Google ADK or Agent Platform workflows, `traceguard/adk_agent.py` exposes:
 
 - `root_agent`: Google ADK agent object when `google-adk` is installed.
 - `triage_evidence_tool`: deterministic parser/scoring/eval tool used by the ADK agent.
 
-The ADK agent uses Gemini as its model and is instructed to call the deterministic triage tool before making security claims.
+In the demo, I describe this as two entry points over the same core agent logic: Cloud Run for the hosted judge experience, and ADK `root_agent` for Google Agent Builder / Agent Platform orchestration.
 
 ## Repository Contents
 

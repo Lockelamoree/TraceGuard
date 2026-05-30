@@ -8,6 +8,8 @@ ENV PYTHONUNBUFFERED=1 \
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates nodejs npm \
+    && npm install -g @arizeai/phoenix-mcp@4.0.13 \
+    && npm cache clean --force \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements-production.txt /app/requirements-production.txt

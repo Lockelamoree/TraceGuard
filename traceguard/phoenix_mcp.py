@@ -7,7 +7,7 @@ import re
 import shlex
 import subprocess
 import threading
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from typing import BinaryIO
 
 from .config import RuntimeConfig
@@ -23,20 +23,32 @@ class PhoenixMcpResult:
     status: str
     summary: str
     tool_names: tuple[str, ...] = ()
+    queried_tool_names: tuple[str, ...] = ()
+    resource_counts: dict[str, int] = field(default_factory=dict)
+    query_error: str = ""
     error: str = ""
     attempted: bool = False
     command_configured: bool = False
 
     @property
     def step_status(self) -> str:
-        if self.status in {"ok", "local_replay", "command_not_configured"}:
+        if self.status in {"ok", "discovery_only", "local_replay", "command_not_configured"}:
             return "complete"
         return "warn"
 
     def public_dict(self) -> dict[str, object]:
         data = asdict(self)
         data["tool_count"] = len(self.tool_names)
+        data["queried_tool_count"] = len(self.queried_tool_names)
         return data
+
+
+@dataclass(frozen=True)
+class McpRuntimeInspection:
+    tool_names: tuple[str, ...]
+    queried_tool_names: tuple[str, ...] = ()
+    resource_counts: dict[str, int] = field(default_factory=dict)
+    query_error: str = ""
 
 
 def inspect_phoenix_mcp(
@@ -88,13 +100,13 @@ def inspect_phoenix_mcp(
             command_configured=False,
             summary=(
                 f"Phoenix OTEL is live for project {context.phoenix_project}, but no MCP command is configured. "
-                "Set PHOENIX_MCP_COMMAND to launch the Phoenix MCP server and perform read-only tools/list "
-                "introspection during the run."
+                "Set PHOENIX_MCP_COMMAND to launch the Phoenix MCP server, discover tools, and attempt read-only "
+                "project/trace queries during the run."
             ),
         )
 
     try:
-        tool_names = _discover_mcp_tools(runtime)
+        inspection = _inspect_mcp_runtime(runtime)
     except Exception as exc:  # pragma: no cover - exact server failures are environment-specific
         error = _safe_error(exc)
         return PhoenixMcpResult(
@@ -108,21 +120,39 @@ def inspect_phoenix_mcp(
             ),
         )
 
+    tool_names = inspection.tool_names
     preview = ", ".join(tool_names[:6]) if tool_names else "no tools returned"
     extra = "" if len(tool_names) <= 6 else f", plus {len(tool_names) - 6} more"
+    if inspection.queried_tool_names:
+        query_bits = ", ".join(
+            f"{name}={inspection.resource_counts.get(name, 0)}"
+            for name in inspection.queried_tool_names
+        )
+        summary = (
+            f"Phoenix MCP query succeeded against {context.mcp_server}: initialized an MCP session, discovered "
+            f"{len(tool_names)} tools ({preview}{extra}), and queried read-only Phoenix data ({query_bits})."
+        )
+        status = "ok"
+    else:
+        query_detail = f" Read-only trace/eval query did not complete: {inspection.query_error}." if inspection.query_error else ""
+        summary = (
+            f"Phoenix MCP discovery succeeded against {context.mcp_server}: initialized an MCP session and discovered "
+            f"{len(tool_names)} tools ({preview}{extra}).{query_detail}"
+        )
+        status = "discovery_only"
     return PhoenixMcpResult(
-        status="ok",
+        status=status,
         attempted=True,
         command_configured=True,
         tool_names=tool_names,
-        summary=(
-            f"Phoenix MCP query succeeded against {context.mcp_server}: initialized an MCP session and discovered "
-            f"{len(tool_names)} tools ({preview}{extra})."
-        ),
+        queried_tool_names=inspection.queried_tool_names,
+        resource_counts=inspection.resource_counts,
+        query_error=inspection.query_error,
+        summary=summary,
     )
 
 
-def _discover_mcp_tools(config: RuntimeConfig) -> tuple[str, ...]:
+def _inspect_mcp_runtime(config: RuntimeConfig) -> McpRuntimeInspection:
     command = _split_command(config.phoenix_mcp_command)
     env = _mcp_environment(config)
     process = subprocess.Popen(
@@ -159,9 +189,183 @@ def _discover_mcp_tools(config: RuntimeConfig) -> tuple[str, ...]:
         tools = tools_response.get("result", {}).get("tools", [])
         if not isinstance(tools, list):
             raise RuntimeError("MCP tools/list returned an unexpected shape")
-        return tuple(sorted(str(tool.get("name", "")) for tool in tools if isinstance(tool, dict) and tool.get("name")))
+        tool_dicts = tuple(tool for tool in tools if isinstance(tool, dict) and tool.get("name"))
+        tool_names = tuple(sorted(str(tool.get("name", "")) for tool in tool_dicts))
+        queried_tool_names, resource_counts, query_error = _attempt_read_queries(
+            process,
+            tool_dicts,
+            config,
+            start_request_id=3,
+        )
+        return McpRuntimeInspection(
+            tool_names=tool_names,
+            queried_tool_names=queried_tool_names,
+            resource_counts=resource_counts,
+            query_error=query_error,
+        )
     finally:
         _stop_process(process)
+
+
+def _attempt_read_queries(
+    process: subprocess.Popen[bytes],
+    tools: tuple[dict[str, object], ...],
+    config: RuntimeConfig,
+    *,
+    start_request_id: int,
+) -> tuple[tuple[str, ...], dict[str, int], str]:
+    tool_by_name = {str(tool.get("name")): tool for tool in tools}
+    queried: list[str] = []
+    counts: dict[str, int] = {}
+    errors: list[str] = []
+    request_id = start_request_id
+    project_hint: dict[str, str] = {}
+
+    for tool_name in ("list-projects", "list-traces"):
+        tool = tool_by_name.get(tool_name)
+        if not tool:
+            continue
+        arguments = _arguments_for_tool(tool, config, project_hint)
+        if arguments is None:
+            errors.append(f"{tool_name} required unsupported arguments")
+            continue
+        try:
+            result = _call_mcp_tool(process, request_id, tool_name, arguments, config.phoenix_mcp_timeout_seconds)
+        except Exception as exc:  # pragma: no cover - environment-specific MCP schemas/failures
+            errors.append(f"{tool_name}: {_safe_error(exc)}")
+            request_id += 1
+            continue
+        queried.append(tool_name)
+        counts[tool_name] = _estimate_resource_count(result)
+        if tool_name == "list-projects":
+            project_hint = _project_hint_from_result(result, config)
+        request_id += 1
+
+    return tuple(queried), counts, "; ".join(errors)[:500]
+
+
+def _call_mcp_tool(
+    process: subprocess.Popen[bytes],
+    request_id: int,
+    name: str,
+    arguments: dict[str, object],
+    timeout_seconds: float,
+) -> dict[str, object]:
+    if process.stdin is None or process.stdout is None:
+        raise RuntimeError("MCP server did not expose stdio pipes")
+    _send_mcp_message(
+        process.stdin,
+        {
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "method": "tools/call",
+            "params": {"name": name, "arguments": arguments},
+        },
+    )
+    response = _read_mcp_message_with_timeout(process.stdout, timeout_seconds)
+    _raise_on_mcp_error(response, f"tools/call {name}")
+    result = response.get("result", {})
+    if not isinstance(result, dict):
+        raise RuntimeError(f"MCP tools/call {name} returned an unexpected shape")
+    return result
+
+
+def _arguments_for_tool(
+    tool: dict[str, object],
+    config: RuntimeConfig,
+    project_hint: dict[str, str],
+) -> dict[str, object] | None:
+    schema = tool.get("inputSchema")
+    properties: dict[str, object] = {}
+    required: set[str] = set()
+    if isinstance(schema, dict):
+        raw_properties = schema.get("properties")
+        if isinstance(raw_properties, dict):
+            properties = raw_properties
+        raw_required = schema.get("required")
+        if isinstance(raw_required, list):
+            required = {str(item) for item in raw_required}
+
+    arguments: dict[str, object] = {}
+    for name in set(properties) | required:
+        lowered = name.lower()
+        if lowered in {"projectname", "project_name", "project"}:
+            arguments[name] = project_hint.get("projectName") or config.phoenix_project_name
+        elif lowered in {"projectid", "project_id"}:
+            project_id = project_hint.get("projectId")
+            if project_id:
+                arguments[name] = project_id
+        elif lowered in {"limit", "first", "pagesize", "page_size", "maxresults", "max_results"}:
+            arguments[name] = 5
+
+    missing_required = required - set(arguments)
+    if missing_required:
+        return None
+    return arguments
+
+
+def _estimate_resource_count(result: dict[str, object]) -> int:
+    for value in _json_like_values(result):
+        count = _resource_count_from_value(value)
+        if count is not None:
+            return count
+    return 1 if result else 0
+
+
+def _resource_count_from_value(value: object) -> int | None:
+    if isinstance(value, list):
+        return len(value)
+    if not isinstance(value, dict):
+        return None
+    for key in ("projects", "traces", "spans", "sessions", "datasets", "experiments", "data", "items", "nodes"):
+        child = value.get(key)
+        if isinstance(child, list):
+            return len(child)
+    return None
+
+
+def _project_hint_from_result(result: dict[str, object], config: RuntimeConfig) -> dict[str, str]:
+    fallback: dict[str, str] = {}
+    for value in _json_like_values(result):
+        for node in _iter_dicts(value):
+            name = str(node.get("name") or node.get("projectName") or node.get("project_name") or "")
+            project_id = str(node.get("id") or node.get("projectId") or node.get("project_id") or "")
+            if not name and not project_id:
+                continue
+            hint = {"projectName": name or config.phoenix_project_name}
+            if project_id:
+                hint["projectId"] = project_id
+            if name == config.phoenix_project_name:
+                return hint
+            if not fallback:
+                fallback = hint
+    return fallback
+
+
+def _json_like_values(result: dict[str, object]) -> tuple[object, ...]:
+    values: list[object] = [result]
+    content = result.get("content")
+    if isinstance(content, list):
+        for item in content:
+            if not isinstance(item, dict):
+                continue
+            text = item.get("text")
+            if isinstance(text, str):
+                try:
+                    values.append(json.loads(text))
+                except json.JSONDecodeError:
+                    continue
+    return tuple(values)
+
+
+def _iter_dicts(value: object):
+    if isinstance(value, dict):
+        yield value
+        for child in value.values():
+            yield from _iter_dicts(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from _iter_dicts(child)
 
 
 def _split_command(command: str) -> list[str]:
@@ -192,7 +396,9 @@ def _validate_command(parts: list[str]) -> None:
 def _mcp_environment(config: RuntimeConfig) -> dict[str, str]:
     env = os.environ.copy()
     env.setdefault("PHOENIX_BASE_URL", config.phoenix_base_url)
+    env.setdefault("PHOENIX_HOST", config.phoenix_base_url)
     env.setdefault("PHOENIX_PROJECT_NAME", config.phoenix_project_name)
+    env.setdefault("PHOENIX_PROJECT", config.phoenix_project_name)
     return env
 
 

@@ -22,7 +22,7 @@ flowchart TD
     otel --> phoenix["Phoenix project"]
 
     findings -. "when configured" .-> mcp["Phoenix MCP client"]
-    mcp -. "initialize + tools/list" .-> phoenix
+    mcp -. "initialize + tools/list + read-only trace/project query" .-> phoenix
 ```
 
 ## Local vs Hosted
@@ -40,7 +40,7 @@ flowchart LR
         hostedEvidence["judge evidence"] --> hostedAgent["TraceGuard server"]
         hostedAgent --> hostedGemini["Gemini synthesis<br/>if env vars are set"]
         hostedAgent --> hostedOtel["Phoenix OTEL spans<br/>if collector/key is set"]
-        hostedAgent --> hostedMcp["Phoenix MCP tools/list<br/>if command is set"]
+        hostedAgent --> hostedMcp["Phoenix MCP tools/list + read-only trace/project query<br/>if command is set"]
         hostedGemini --> hostedReport["report preview"]
         hostedOtel --> hostedStatus["runtime badges / run steps"]
         hostedMcp --> hostedStatus
@@ -57,10 +57,10 @@ flowchart LR
 | `traceguard/evals.py` | Checks grounding, claim hygiene, detection quality, remediation quality, severity, and duplicates. | It does not replace human review. |
 | `traceguard/gemini_adapter.py` | Adds optional hosted narrative synthesis through Gemini. | It is disabled locally unless Google Cloud env vars are configured. |
 | `traceguard/observability.py` | Sends Phoenix/OpenTelemetry spans when configured. | It does not claim live tracing in local replay mode. |
-| `traceguard/phoenix_mcp.py` | Starts a pinned Phoenix MCP command and performs read-only `initialize` + `tools/list`. | It does not yet query historical traces to drive autonomous replanning. |
+| `traceguard/phoenix_mcp.py` | Starts a pinned Phoenix MCP command, performs `initialize` + `tools/list`, then attempts read-only `list-projects` and `list-traces`. | It does not yet use historical traces to drive autonomous replanning. |
 | `traceguard/report.py` | Produces the markdown incident report. | It does not remove evidence IDs from confirmed findings. |
 | `web/` | Gives judges and reviewers a small UI for loading evidence, running baseline/improved, and copying the report. | It is not a SIEM replacement. |
 
 ## Current Boundary
 
-The current build demonstrates an eval-guided baseline/improved loop. The next deeper Arize step is to have Phoenix MCP read actual trace/eval data and use that to generate an improvement plan dynamically.
+The current build demonstrates an eval-guided baseline/improved loop and read-only Phoenix MCP trace/project querying when Phoenix is live. The next deeper Arize step is to use those trace/eval results to generate an improvement plan dynamically.

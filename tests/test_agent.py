@@ -238,6 +238,34 @@ class TraceGuardAgentTests(unittest.TestCase):
                     "result": {"tools": [{"name": "list-traces"}, {"name": "list-projects"}]},
                 }
             )
+            + mcp_frame(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 3,
+                    "result": {
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": json.dumps({"projects": [{"id": "project-1", "name": "traceguard-hackathon"}]}),
+                            }
+                        ]
+                    },
+                }
+            )
+            + mcp_frame(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 4,
+                    "result": {
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": json.dumps({"traces": [{"trace_id": "trace-1"}, {"trace_id": "trace-2"}]}),
+                            }
+                        ]
+                    },
+                }
+            )
         )
         fake_process = FakeMcpProcess(stdout)
 
@@ -247,9 +275,15 @@ class TraceGuardAgentTests(unittest.TestCase):
         self.assertEqual(result.status, "ok")
         self.assertTrue(result.attempted)
         self.assertEqual(result.tool_names, ("list-projects", "list-traces"))
+        self.assertEqual(result.queried_tool_names, ("list-projects", "list-traces"))
+        self.assertEqual(result.resource_counts["list-projects"], 1)
+        self.assertEqual(result.resource_counts["list-traces"], 2)
         sent = fake_process.stdin.getvalue().decode("utf-8")
         self.assertIn('"method":"initialize"', sent)
         self.assertIn('"method":"tools/list"', sent)
+        self.assertIn('"method":"tools/call"', sent)
+        self.assertIn('"name":"list-projects"', sent)
+        self.assertIn('"name":"list-traces"', sent)
         popen.assert_called_once()
 
     def test_phoenix_mcp_rejects_unpinned_npx_package(self) -> None:

@@ -41,6 +41,7 @@ Suggested checks:
 - `/healthz` returns `ok`.
 - `/api/auth/status` reports auth enabled and authenticated after login.
 - Runtime badges clearly identify whether Gemini, Phoenix OTEL, and Phoenix MCP are live or replay/skipped.
+- If Phoenix MCP is live, the runtime detail reports discovered tools and read-only `list-projects` / `list-traces` query status.
 - The final report cites evidence IDs for every confirmed finding.
 
 ## Claims Boundaries
@@ -49,4 +50,4 @@ TraceGuard does not claim exploitation, compromise, Gemini synthesis, Phoenix tr
 
 Local mode is deterministic. It labels Phoenix output as replay guidance instead of implying live MCP trace queries.
 
-The current build demonstrates an eval-guided baseline/improved replay loop. The next production step is to use Phoenix MCP trace/eval reads to generate improvement plans dynamically.
+The current build demonstrates an eval-guided baseline/improved replay loop. When Phoenix MCP is live, it also attempts read-only project/trace queries. The next production step is to use those Phoenix MCP trace/eval reads to generate improvement plans dynamically.

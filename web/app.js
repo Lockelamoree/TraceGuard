@@ -167,7 +167,7 @@ async function loadRuntimeStatus() {
         ? "Phoenix config is present; hosted trace delivery is confirmed only when a run reports OTEL live."
         : "Phoenix is not configured; the UI shows local trace context and eval output only.",
       status.phoenix_mcp_command_configured
-        ? "Phoenix MCP command is configured; read-only tool discovery is attempted when OTEL tracing is live."
+        ? "Phoenix MCP command is configured; read-only tool discovery and trace/project queries are attempted when OTEL tracing is live."
         : "Phoenix MCP command is unset; live MCP queries are skipped instead of being implied.",
     ].join(" ");
   } catch {
@@ -261,7 +261,9 @@ function renderRuntimeFromResult(result) {
       ? "Phoenix configured, not live"
       : "Phoenix local trace context";
   const mcpState = result.arize?.mcp?.status === "ok"
-    ? "MCP live"
+    ? "MCP live query"
+    : result.arize?.mcp?.status === "discovery_only"
+      ? "MCP discovery live"
     : result.arize?.mcp?.command_configured
       ? "MCP attempted"
       : "MCP skipped";
@@ -280,12 +282,16 @@ function renderRuntimeFromResult(result) {
   const mcpDetail = result.arize?.mcp?.summary
     ? escapeHtml(result.arize.mcp.summary)
     : "Phoenix MCP introspection status was not returned.";
+  const mcpQueries = Array.isArray(result.arize?.mcp?.queried_tool_names) && result.arize.mcp.queried_tool_names.length
+    ? `Read-only MCP queries: ${escapeHtml(result.arize.mcp.queried_tool_names.join(", "))}.`
+    : "No read-only Phoenix trace/project query completed in this run.";
 
   runtimeDetail.innerHTML = `
     <strong>Runtime</strong>
     <div class="detail">${geminiDetail}</div>
     <div class="detail">${phoenixDetail}</div>
     <div class="detail">${mcpDetail}</div>
+    <div class="detail">${mcpQueries}</div>
   `;
 }
 

@@ -255,6 +255,10 @@ def _mcp_span_attributes(mcp: PhoenixMcpResult) -> dict[str, object]:
         "traceguard.phoenix_mcp_command_configured": mcp.command_configured,
         "traceguard.phoenix_mcp_tool_count": len(mcp.tool_names),
         "traceguard.phoenix_mcp_tools": mcp.tool_names,
+        "traceguard.phoenix_mcp_queried_tool_count": len(mcp.queried_tool_names),
+        "traceguard.phoenix_mcp_queried_tools": mcp.queried_tool_names,
+        "traceguard.phoenix_mcp_resource_counts": json.dumps(mcp.resource_counts, sort_keys=True),
+        "traceguard.phoenix_mcp_query_error": mcp.query_error[:300],
         "traceguard.phoenix_mcp_error": mcp.error[:300],
     }
 

@@ -51,7 +51,7 @@ flowchart TD
     gemini -. "summarizes findings" .-> report
     agent -. "spans" .-> phoenix["Phoenix / OpenTelemetry"]
     evals -. "scores" .-> phoenix
-    agent -. "read-only initialize + tools/list" .-> mcp["Phoenix MCP"]
+    agent -. "read-only initialize, tools/list, list-projects, list-traces" .-> mcp["Phoenix MCP"]
     mcp -. "status and tool count" .-> status["Runtime badges / run steps"]
     phoenix -. "trace status" .-> status
 ```
@@ -82,7 +82,7 @@ More detail lives in `PROJECT_VISUALIZATION.md`.
 - Google Cloud deployment target: Cloud Run.
 - Google Cloud AI target: Gemini on Vertex AI through the Google Gen AI SDK version line required by Google ADK.
 - Agent surface: ADK-compatible `root_agent` in `traceguard/adk_agent.py`.
-- Arize: Phoenix Cloud, Phoenix OTEL instrumentation, and a stdio Phoenix MCP client that performs read-only `initialize` and `tools/list` when configured.
+- Arize: Phoenix Cloud, Phoenix OTEL instrumentation, and a stdio Phoenix MCP client that performs read-only `initialize`, `tools/list`, `list-projects`, and `list-traces` when configured and supported by the server.
 - Python standard library for the local backend.
 - HTML, CSS, and JavaScript for the judge-facing web app.
 
@@ -90,7 +90,7 @@ More detail lives in `PROJECT_VISUALIZATION.md`.
 
 I treated observability as part of the agent loop, not a screenshot at the end. Each triage run has traceable phases: parsing, finding derivation, validation, evals, Gemini synthesis, Phoenix MCP introspection, and report generation.
 
-In production mode, Phoenix/OpenTelemetry receives run metadata such as evidence mix, finding IDs/severities, eval scores, Gemini status, MCP status/tool count, and report length. When `PHOENIX_MCP_COMMAND` is configured and OTEL is live, TraceGuard starts the Phoenix MCP server over stdio, initializes a JSON-RPC session, and performs a read-only `tools/list` discovery call. In local no-credential mode, the app labels the Phoenix step as replay/demo output instead of pretending live trace queries happened.
+In production mode, Phoenix/OpenTelemetry receives run metadata such as evidence mix, finding IDs/severities, eval scores, Gemini status, MCP status/tool count, read-only MCP query names, and report length. When `PHOENIX_MCP_COMMAND` is configured and OTEL is live, TraceGuard starts the Phoenix MCP server over stdio, initializes a JSON-RPC session, performs `tools/list`, then attempts read-only `list-projects` and `list-traces` queries. In local no-credential mode, the app labels the Phoenix step as replay/demo output instead of pretending live trace queries happened.
 
 The improved run shows how eval feedback changes the checklist: public access is promoted from high to critical confidence, and disabled repository controls become explicit findings instead of staying buried in raw evidence.
 
@@ -106,8 +106,10 @@ For hosted deployment, configure:
 - `PHOENIX_COLLECTOR_ENDPOINT`
 - `PHOENIX_PROJECT_NAME=traceguard-hackathon`
 - `PHOENIX_MCP_SERVER=@arizeai/phoenix-mcp`
-- `PHOENIX_MCP_COMMAND=npx -y @arizeai/phoenix-mcp@4.0.13`
-- `PHOENIX_MCP_TIMEOUT_SECONDS=4`
+- `PHOENIX_MCP_COMMAND=phoenix-mcp`
+- `PHOENIX_MCP_TIMEOUT_SECONDS=12`
+
+The production image preinstalls `@arizeai/phoenix-mcp@4.0.13`; local experiments can still use `npx -y @arizeai/phoenix-mcp@4.0.13`.
 
 `PHOENIX_API_KEY` is mounted from Google Secret Manager in Cloud Run. The production image includes Node/npm for the pinned Phoenix MCP command, runs as a non-root user, and exposes `/healthz`. The app returns runtime status without exposing secret values or command-line values.
 
@@ -123,7 +125,11 @@ Load the sample bundle. Run the baseline agent. Show findings for public Cloud R
 
 ### 1:30-2:20 Arize / Phoenix Loop
 
-Run the improved agent. Show the baseline-to-improved delta panel, Phoenix/OpenTelemetry status, Phoenix MCP status, and evals. Explain that eval feedback flagged under-ranked public access and missing repo security controls, so the improved run adds disabled branch protection and secret scanning findings. If the hosted runtime shows MCP `ok`, call out the discovered Phoenix tools; if not, call out the exact skipped/error reason shown in the UI.
+Run the improved agent. Show the baseline-to-improved delta panel, Phoenix/OpenTelemetry status, Phoenix MCP status, and evals. Explain that eval feedback flagged under-ranked public access and missing repo security controls, so the improved run adds disabled branch protection and secret scanning findings. If the hosted runtime shows MCP `ok`, call out the discovered Phoenix tools and the read-only `list-projects` / `list-traces` query result; if not, call out the exact skipped/error reason shown in the UI.
+
+### Agent Builder / ADK proof point
+
+Open `traceguard/adk_agent.py` in the repo. `root_agent` is the Google ADK agent surface for Agent Builder / Agent Platform orchestration. It uses Gemini and is instructed to call `triage_evidence_tool` before making claims. The hosted Cloud Run UI is the judge-friendly runtime over the same deterministic parser/scoring/eval pipeline.
 
 ### 2:20-2:50 Final Report
 

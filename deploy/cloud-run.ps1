@@ -10,7 +10,8 @@ param(
   [string]$AuthSecretName = "traceguard-auth-token",
   [string]$PhoenixBaseUrl = "https://app.phoenix.arize.com",
   [string]$PhoenixCollectorEndpoint = "",
-  [string]$PhoenixMcpCommand = "npx -y @arizeai/phoenix-mcp@4.0.13",
+  [string]$PhoenixMcpCommand = "phoenix-mcp",
+  [int]$PhoenixMcpTimeoutSeconds = 12,
   [string]$GeminiModel = "gemini-2.5-flash",
   [int]$AuthSessionSeconds = 43200
 )
@@ -96,6 +97,7 @@ $envVars = @(
   "PHOENIX_PROJECT_NAME=traceguard-hackathon",
   "PHOENIX_BASE_URL=$PhoenixBaseUrl",
   "PHOENIX_MCP_SERVER=@arizeai/phoenix-mcp",
+  "PHOENIX_MCP_TIMEOUT_SECONDS=$PhoenixMcpTimeoutSeconds",
   "TRACEGUARD_AUTH_SESSION_SECONDS=$AuthSessionSeconds"
 )
 
