@@ -268,6 +268,9 @@ def _call_mcp_tool(
     result = response.get("result", {})
     if not isinstance(result, dict):
         raise RuntimeError(f"MCP tools/call {name} returned an unexpected shape")
+    auth_error = _authentication_error_from_result(result)
+    if auth_error:
+        raise RuntimeError(auth_error)
     return result
 
 
@@ -357,6 +360,27 @@ def _json_like_values(result: dict[str, object]) -> tuple[object, ...]:
                 except json.JSONDecodeError:
                     continue
     return tuple(values)
+
+
+def _authentication_error_from_result(result: dict[str, object]) -> str:
+    content = result.get("content")
+    if not isinstance(content, list):
+        return ""
+    for item in content:
+        if not isinstance(item, dict):
+            continue
+        text = item.get("text")
+        if not isinstance(text, str):
+            continue
+        sample = text[:1000].lower()
+        if "<html" in sample and "authentication" in sample:
+            return (
+                "Phoenix returned an HTML authentication page; check PHOENIX_BASE_URL, "
+                "PHOENIX_COLLECTOR_ENDPOINT, PHOENIX_API_KEY, and PHOENIX_CLIENT_HEADERS"
+            )
+        if "unauthorized" in sample or "invalid api key" in sample:
+            return "Phoenix API rejected the MCP query credentials"
+    return ""
 
 
 def _iter_dicts(value: object):

@@ -296,6 +296,72 @@ class TraceGuardAgentTests(unittest.TestCase):
         self.assertIn('"name":"list-traces"', sent)
         popen.assert_called_once()
 
+    def test_phoenix_mcp_authentication_html_is_not_counted_as_query_success(self) -> None:
+        context = TraceContext(
+            run_id="run-1",
+            phoenix_project="traceguard-hackathon",
+            phoenix_enabled=True,
+            phoenix_collector_endpoint="https://app.phoenix.arize.com/s/demo",
+            mcp_server="@arizeai/phoenix-mcp",
+            tracing_ready=True,
+            tracing_error="",
+        )
+        config = RuntimeConfig(
+            google_cloud_project="traceguard-prod",
+            google_cloud_location="us-central1",
+            google_genai_use_vertexai=True,
+            gemini_model="gemini-2.5-flash",
+            enable_gemini_synthesis=True,
+            phoenix_project_name="traceguard-hackathon",
+            phoenix_base_url="https://app.phoenix.arize.com",
+            phoenix_collector_endpoint="https://app.phoenix.arize.com/s/demo",
+            phoenix_api_key_configured=True,
+            phoenix_mcp_server="@arizeai/phoenix-mcp",
+            phoenix_mcp_command="phoenix-mcp",
+            phoenix_mcp_timeout_seconds=1,
+            traceguard_auth_configured=True,
+            traceguard_auth_session_seconds=3600,
+        )
+        stdout = (
+            mcp_frame({"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": "2024-11-05"}})
+            + mcp_frame(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "result": {"tools": [{"name": "list-projects"}, {"name": "list-traces"}]},
+                }
+            )
+            + mcp_frame(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 3,
+                    "result": {
+                        "content": [
+                            {"type": "text", "text": "<html><head><title>Authentication</title></head></html>"}
+                        ]
+                    },
+                }
+            )
+            + mcp_frame(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 4,
+                    "result": {
+                        "content": [
+                            {"type": "text", "text": "<html><head><title>Authentication</title></head></html>"}
+                        ]
+                    },
+                }
+            )
+        )
+
+        with patch("traceguard.phoenix_mcp.subprocess.Popen", return_value=FakeMcpProcess(stdout)):
+            result = inspect_phoenix_mcp(context, improved=True, config=config)
+
+        self.assertEqual(result.status, "discovery_only")
+        self.assertEqual(result.queried_tool_names, ())
+        self.assertIn("authentication page", result.query_error)
+
     def test_phoenix_mcp_rejects_unpinned_npx_package(self) -> None:
         context = TraceContext(
             run_id="run-1",
