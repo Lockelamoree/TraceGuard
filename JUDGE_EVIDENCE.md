@@ -5,7 +5,7 @@ This is the checklist I use to prove what TraceGuard is actually doing. The goal
 ## Public URLs
 
 - Hosted app: https://traceguard-cnhtsa5yrq-uc.a.run.app
-- Public repository: https://github.com/Lockelamoree/Arize-track---Google-Cloud-Rapid-Agent-Hackathon-TraceGuard
+- Public repository: https://github.com/Lockelamoree/TraceGuard
 
 ## Local Verification
 

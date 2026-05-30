@@ -10,7 +10,7 @@ The local version is intentionally easy to run. The hosted version is wired for 
 
 Public project URL: https://traceguard-cnhtsa5yrq-uc.a.run.app
 
-Public repository URL: https://github.com/Lockelamoree/Arize-track---Google-Cloud-Rapid-Agent-Hackathon-TraceGuard
+Public repository URL: https://github.com/Lockelamoree/TraceGuard
 
 Run locally:
 

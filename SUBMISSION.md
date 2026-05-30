@@ -10,7 +10,7 @@ TraceGuard is my Arize track submission. The hosted path uses Cloud Run, Gemini 
 
 Live project URL: https://traceguard-cnhtsa5yrq-uc.a.run.app
 
-Public repository URL: https://github.com/Lockelamoree/Arize-track---Google-Cloud-Rapid-Agent-Hackathon-TraceGuard
+Public repository URL: https://github.com/Lockelamoree/TraceGuard
 
 Judge access: if the hosted app asks for an access key, use the temporary judge key provided in the Devpost submission field. The local demo needs no cloud credentials and still shows deterministic triage, baseline/improved comparison, evals, and report export.
 
