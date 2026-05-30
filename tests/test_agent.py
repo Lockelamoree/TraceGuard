@@ -89,6 +89,7 @@ class TraceGuardAgentTests(unittest.TestCase):
                 "PHOENIX_API_KEY": "",
                 "PHOENIX_BASE_URL": "",
                 "PHOENIX_COLLECTOR_ENDPOINT": "",
+                "PHOENIX_CLIENT_HEADERS": "",
                 "PHOENIX_MCP_COMMAND": "",
                 "PHOENIX_MCP_TIMEOUT_SECONDS": "",
                 "TRACEGUARD_AUTH_TOKEN": "",
@@ -175,6 +176,15 @@ class TraceGuardAgentTests(unittest.TestCase):
         report_span = spans["render_report"]
         self.assertEqual(report_span.attributes["traceguard.report_length"], len(result["report_markdown"]))
         self.assertIn("traceguard.report.rendered", [name for name, _ in report_span.events])
+
+    def test_phoenix_client_headers_are_derived_for_older_cloud_spaces(self) -> None:
+        with patch.dict(os.environ, {"PHOENIX_API_KEY": "test-key", "PHOENIX_CLIENT_HEADERS": ""}):
+            observability._ensure_phoenix_client_headers()
+            self.assertEqual(os.environ["PHOENIX_CLIENT_HEADERS"], "api_key=test-key")
+
+        with patch.dict(os.environ, {"PHOENIX_API_KEY": "test-key", "PHOENIX_CLIENT_HEADERS": "x=y"}):
+            observability._ensure_phoenix_client_headers()
+            self.assertEqual(os.environ["PHOENIX_CLIENT_HEADERS"], "x=y")
 
     def test_local_phoenix_introspection_is_explicitly_demo_replay(self) -> None:
         result = analyze_bundle("{}", "improved")

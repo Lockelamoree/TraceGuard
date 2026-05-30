@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import time
 import uuid
 from contextlib import contextmanager
@@ -141,6 +142,7 @@ def _initialize_phoenix(config: RuntimeConfig) -> None:
         from opentelemetry import trace
         from phoenix.otel import register
 
+        _ensure_phoenix_client_headers()
         register(project_name=config.phoenix_project_name, auto_instrument=True, batch=True)
         _TRACER = trace.get_tracer("traceguard")
         _TRACING_READY = True
@@ -149,3 +151,11 @@ def _initialize_phoenix(config: RuntimeConfig) -> None:
         _TRACING_ERROR = f"Production dependency missing: {exc.name or 'arize-phoenix-otel'}"
     except Exception as exc:  # pragma: no cover - requires live Phoenix configuration
         _TRACING_ERROR = f"Phoenix OTEL registration failed: {str(exc)[:500]}"
+
+
+def _ensure_phoenix_client_headers() -> None:
+    if os.getenv("PHOENIX_CLIENT_HEADERS", "").strip():
+        return
+    api_key = os.getenv("PHOENIX_API_KEY", "").strip()
+    if api_key:
+        os.environ["PHOENIX_CLIENT_HEADERS"] = f"api_key={api_key}"

@@ -104,6 +104,7 @@ For hosted deployment, configure:
 - `PHOENIX_API_KEY`
 - `PHOENIX_BASE_URL=https://app.phoenix.arize.com`
 - `PHOENIX_COLLECTOR_ENDPOINT`
+- `PHOENIX_CLIENT_HEADERS` if your Phoenix Cloud space requires `api_key=...`; otherwise TraceGuard derives that header from `PHOENIX_API_KEY` at runtime.
 - `PHOENIX_PROJECT_NAME=traceguard-hackathon`
 - `PHOENIX_MCP_SERVER=@arizeai/phoenix-mcp`
 - `PHOENIX_MCP_COMMAND=phoenix-mcp`

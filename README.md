@@ -138,6 +138,7 @@ Production environment variables:
 - `PHOENIX_API_KEY`: Enables Phoenix Cloud tracing. Store this in Secret Manager.
 - `PHOENIX_BASE_URL`: Phoenix API base URL for MCP, defaults to `https://app.phoenix.arize.com`.
 - `PHOENIX_COLLECTOR_ENDPOINT`: Phoenix collector endpoint or Phoenix Cloud space URL.
+- `PHOENIX_CLIENT_HEADERS`: Optional Phoenix client headers. If this is absent and `PHOENIX_API_KEY` is present, TraceGuard derives `api_key=<key>` at runtime for older Phoenix Cloud spaces without printing the key.
 - `PHOENIX_PROJECT_NAME`: Phoenix project name, defaults to `traceguard-hackathon`.
 - `PHOENIX_MCP_SERVER`: MCP server command/name, defaults to `@arizeai/phoenix-mcp`.
 - `PHOENIX_MCP_COMMAND`: Optional stdio command used for live read-only MCP introspection. The production image preinstalls `@arizeai/phoenix-mcp@4.0.13`, so `phoenix-mcp` is the preferred Cloud Run value.
