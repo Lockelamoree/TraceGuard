@@ -16,6 +16,7 @@ from .observability import TraceContext
 MCP_PROTOCOL_VERSION = "2024-11-05"
 PHOENIX_MCP_PACKAGE = "@arizeai/phoenix-mcp"
 PINNED_PACKAGE_PATTERN = re.compile(r"^@arizeai/phoenix-mcp@\d+\.\d+\.\d+$")
+MAX_MCP_MESSAGE_BYTES = 4 * 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -404,7 +405,7 @@ def _mcp_environment(config: RuntimeConfig) -> dict[str, str]:
 
 def _send_mcp_message(stream: BinaryIO, message: dict[str, object]) -> None:
     payload = json.dumps(message, separators=(",", ":")).encode("utf-8")
-    stream.write(f"Content-Length: {len(payload)}\r\n\r\n".encode("ascii") + payload)
+    stream.write(payload + b"\n")
     stream.flush()
 
 
@@ -429,16 +430,30 @@ def _read_mcp_message_with_timeout(stream: BinaryIO, timeout_seconds: float) -> 
 
 
 def _read_mcp_message(stream: BinaryIO) -> dict[str, object]:
-    header = bytearray()
-    while b"\r\n\r\n" not in header:
+    prefix = bytearray()
+    while True:
         chunk = stream.read(1)
         if not chunk:
             raise EOFError("MCP server closed stdout before sending a response")
-        header.extend(chunk)
-        if len(header) > 16_384:
-            raise RuntimeError("MCP response headers exceeded 16 KiB")
+        prefix.extend(chunk)
+        if b"\r\n\r\n" in prefix:
+            return _read_content_length_message(stream, bytes(prefix))
+        if chunk == b"\n":
+            line = bytes(prefix).strip()
+            if not line:
+                prefix.clear()
+                continue
+            if line.startswith(b"{"):
+                decoded = json.loads(line.decode("utf-8"))
+                if not isinstance(decoded, dict):
+                    raise RuntimeError("MCP response was not a JSON object")
+                return decoded
+        if len(prefix) > MAX_MCP_MESSAGE_BYTES:
+            raise RuntimeError("MCP response exceeded 4 MiB before a message boundary")
 
-    header_bytes, body_prefix = bytes(header).split(b"\r\n\r\n", 1)
+
+def _read_content_length_message(stream: BinaryIO, prefix: bytes) -> dict[str, object]:
+    header_bytes, body_prefix = prefix.split(b"\r\n\r\n", 1)
     content_length = _content_length(header_bytes)
     body = bytearray(body_prefix)
     while len(body) < content_length:

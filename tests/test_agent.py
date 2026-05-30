@@ -74,7 +74,7 @@ class FakeMcpProcess:
 
 def mcp_frame(message: dict[str, object]) -> bytes:
     payload = json.dumps(message, separators=(",", ":")).encode("utf-8")
-    return f"Content-Length: {len(payload)}\r\n\r\n".encode("ascii") + payload
+    return payload + b"\n"
 
 
 class TraceGuardAgentTests(unittest.TestCase):
