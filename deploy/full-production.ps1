@@ -10,7 +10,9 @@ param(
   [string]$PhoenixMcpCommand = "phoenix-mcp",
   [int]$PhoenixMcpTimeoutSeconds = 12,
   [string]$GeminiModel = "gemini-2.5-flash",
-  [int]$AuthSessionSeconds = 43200
+  [int]$AuthSessionSeconds = 43200,
+  [int]$LocalVerifyPort = 18080,
+  [switch]$SkipLocalVerify
 )
 
 $ErrorActionPreference = "Stop"
@@ -120,4 +122,6 @@ finally {
   -PhoenixMcpCommand $PhoenixMcpCommand `
   -PhoenixMcpTimeoutSeconds $PhoenixMcpTimeoutSeconds `
   -GeminiModel $GeminiModel `
-  -AuthSessionSeconds $AuthSessionSeconds
+  -AuthSessionSeconds $AuthSessionSeconds `
+  -LocalVerifyPort $LocalVerifyPort `
+  -SkipLocalVerify:$SkipLocalVerify

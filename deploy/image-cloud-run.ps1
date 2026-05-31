@@ -15,13 +15,16 @@ param(
   [string]$GeminiModel = "gemini-2.5-flash",
   [string]$Repository = "cloud-run-source-deploy",
   [int]$MaxInstances = 2,
-  [int]$AuthSessionSeconds = 43200
+  [int]$AuthSessionSeconds = 43200,
+  [int]$LocalVerifyPort = 18080,
+  [switch]$SkipLocalVerify
 )
 
 $ErrorActionPreference = "Stop"
 
 $repo = Split-Path -Parent (Split-Path -Parent $PSCommandPath)
 $dockerGcloud = Join-Path $repo "deploy\docker-gcloud.ps1"
+$localVerify = Join-Path $repo "deploy\local-verify.ps1"
 $runtimeServiceAccount = "$RuntimeServiceAccountName@$ProjectId.iam.gserviceaccount.com"
 $image = "$Region-docker.pkg.dev/$ProjectId/$Repository/$ServiceName`:latest"
 
@@ -31,6 +34,15 @@ function Assert-LastCommand($Action) {
   if ($LASTEXITCODE -ne 0) {
     throw "$Action failed with exit code $LASTEXITCODE"
   }
+}
+
+if (-not $SkipLocalVerify) {
+  & $localVerify -ServiceName $ServiceName -ImageTag "$ServiceName-local-prod" -LocalPort $LocalVerifyPort
+}
+else {
+  Write-Host "Skipping local verification gate by request."
+  docker build -t "$ServiceName-local-prod" .
+  Assert-LastCommand "docker build"
 }
 
 & $dockerGcloud config set project $ProjectId
@@ -72,8 +84,6 @@ if (-not $token) {
 $token | docker login -u oauth2accesstoken --password-stdin "https://$Region-docker.pkg.dev"
 Assert-LastCommand "docker login"
 
-docker build -t "$ServiceName-local-prod" .
-Assert-LastCommand "docker build"
 docker tag "$ServiceName-local-prod`:latest" $image
 Assert-LastCommand "docker tag"
 docker push $image

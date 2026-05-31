@@ -13,7 +13,9 @@ param(
   [string]$PhoenixMcpCommand = "phoenix-mcp",
   [int]$PhoenixMcpTimeoutSeconds = 12,
   [string]$GeminiModel = "gemini-2.5-flash",
-  [int]$AuthSessionSeconds = 43200
+  [int]$AuthSessionSeconds = 43200,
+  [int]$LocalVerifyPort = 18080,
+  [switch]$SkipLocalVerify
 )
 
 $ErrorActionPreference = "Stop"
@@ -21,6 +23,7 @@ $ErrorActionPreference = "Stop"
 $runtimeServiceAccount = "$RuntimeServiceAccountName@$ProjectId.iam.gserviceaccount.com"
 $repo = Split-Path -Parent (Split-Path -Parent $PSCommandPath)
 $configDir = Join-Path $repo ".gcloud"
+$localVerify = Join-Path $repo "deploy\local-verify.ps1"
 New-Item -ItemType Directory -Force $configDir | Out-Null
 
 function Invoke-Gcloud {
@@ -37,6 +40,13 @@ function Invoke-Gcloud {
     -w /workspace `
     "gcr.io/google.com/cloudsdktool/google-cloud-cli:slim" `
     gcloud @args
+}
+
+if (-not $SkipLocalVerify) {
+  & $localVerify -ServiceName $ServiceName -LocalPort $LocalVerifyPort
+}
+else {
+  Write-Host "Skipping local verification gate by request."
 }
 
 Invoke-Gcloud config set project $ProjectId

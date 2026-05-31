@@ -181,7 +181,7 @@ powershell.exe -ExecutionPolicy Bypass -File .\deploy\set-auth-secret.ps1 `
   -Generate
 ```
 
-Deploy to Cloud Run from a locally verified Docker image:
+Deploy to Cloud Run from a locally verified build:
 
 ```powershell
 powershell.exe -ExecutionPolicy Bypass -File .\deploy\image-cloud-run.ps1 `
@@ -189,6 +189,8 @@ powershell.exe -ExecutionPolicy Bypass -File .\deploy\image-cloud-run.ps1 `
   -Region "us-central1" `
   -PhoenixCollectorEndpoint "https://app.phoenix.arize.com/s/your-space-name"
 ```
+
+Both `deploy\cloud-run.ps1` and `deploy\image-cloud-run.ps1` run `deploy\local-verify.ps1` before touching Cloud Run. The gate builds the container locally, runs the test suite inside that image, starts it on `127.0.0.1`, checks `/health`, confirms the judge proof UI/JS markers are present, and posts the sample bundle to `/api/analyze`. Production deploy stops if any of those checks fail.
 
 If Google Cloud SDK is not installed locally, use the full production wizard. It uses the Cloud SDK container, stores auth in `.gcloud/`, prompts for the Phoenix key locally, writes it to Secret Manager, and deploys Cloud Run:
 
@@ -218,6 +220,7 @@ For the hosted Cloud Run demo, the Docker image preinstalls the pinned MCP packa
 
 ```powershell
 PHOENIX_BASE_URL=https://app.phoenix.arize.com
+PHOENIX_COLLECTOR_ENDPOINT=https://app.phoenix.arize.com/s/your-space-name
 PHOENIX_MCP_COMMAND="phoenix-mcp"
 PHOENIX_MCP_TIMEOUT_SECONDS=12
 ```
