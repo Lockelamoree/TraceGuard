@@ -9,8 +9,8 @@ This is the sanitized proof bundle from the deployed Cloud Run build. It is mean
 - Cloud Run service: `traceguard`
 - Region: `us-central1`
 - Public URL: `https://traceguard-cnhtsa5yrq-uc.a.run.app`
-- Latest ready revision: `traceguard-00019-28g`
-- Traffic: `100%` to `traceguard-00019-28g`
+- Latest ready revision: verified with Cloud Run service describe after deployment
+- Traffic: `100%` to the latest ready revision
 
 ## Public Liveness
 

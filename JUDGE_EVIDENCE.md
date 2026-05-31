@@ -61,7 +61,7 @@ Result: `35` tests passed. In my local Codex shell, `python` and `py -3.11` were
 
 Latest hosted verification I ran on May 31, 2026:
 
-- Cloud Run revision `traceguard-00019-28g` served `100%` of traffic.
+- Cloud Run service describe reported the latest ready revision serving `100%` of traffic.
 - `/health` returned `200`.
 - `HEAD /` and `HEAD /proof` returned `200`.
 - `/proof` returned a public non-secret receipt with `project=TraceGuard`, auth enabled, and `secrets_exposed=false`.
