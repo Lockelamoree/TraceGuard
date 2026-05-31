@@ -17,9 +17,14 @@ MAX_SESSION_SECONDS = 7 * 24 * 60 * 60
 class AuthConfig:
     token: str
     session_seconds: int = DEFAULT_SESSION_SECONDS
+    require_token: bool = False
 
     @property
     def enabled(self) -> bool:
+        return bool(self.token) or self.require_token
+
+    @property
+    def ready(self) -> bool:
         return bool(self.token)
 
 
@@ -27,12 +32,15 @@ def auth_config_from_env() -> AuthConfig:
     return AuthConfig(
         token=os.getenv("TRACEGUARD_AUTH_TOKEN", "").strip(),
         session_seconds=_int_env("TRACEGUARD_AUTH_SESSION_SECONDS", DEFAULT_SESSION_SECONDS),
+        require_token=_bool_env("TRACEGUARD_REQUIRE_AUTH", default=False),
     )
 
 
 def verify_access_token(candidate: object, config: AuthConfig) -> bool:
     if not config.enabled:
         return True
+    if not config.ready:
+        return False
     if not isinstance(candidate, str):
         return False
     return hmac.compare_digest(candidate.strip(), config.token)
@@ -48,6 +56,8 @@ def issue_session(config: AuthConfig, now: float | None = None, nonce: str | Non
 def validate_session_cookie(cookie_header: str | None, config: AuthConfig, now: float | None = None) -> bool:
     if not config.enabled:
         return True
+    if not config.ready:
+        return False
     if not cookie_header:
         return False
     cookie = SimpleCookie()
@@ -64,6 +74,8 @@ def validate_session_cookie(cookie_header: str | None, config: AuthConfig, now: 
 def validate_session_value(value: str, config: AuthConfig, now: float | None = None) -> bool:
     if not config.enabled:
         return True
+    if not config.ready:
+        return False
     parts = value.split(".")
     if len(parts) != 3:
         return False
@@ -118,3 +130,10 @@ def _int_env(name: str, default: int) -> int:
     except ValueError:
         return default
     return max(300, min(parsed, MAX_SESSION_SECONDS))
+
+
+def _bool_env(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}

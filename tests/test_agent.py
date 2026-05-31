@@ -19,7 +19,7 @@ from traceguard.auth import (
 from traceguard.config import RuntimeConfig
 from traceguard.observability import TraceContext
 from traceguard.parsers import parse_evidence_bundle
-from traceguard.phoenix_mcp import inspect_phoenix_mcp
+from traceguard.phoenix_mcp import _mcp_environment, _safe_error, inspect_phoenix_mcp
 
 
 class FakeSpan:
@@ -244,6 +244,7 @@ class TraceGuardAgentTests(unittest.TestCase):
             phoenix_mcp_command="npx -y @arizeai/phoenix-mcp@4.0.13",
             phoenix_mcp_timeout_seconds=1,
             traceguard_auth_configured=True,
+            traceguard_auth_required=True,
             traceguard_auth_session_seconds=3600,
         )
         stdout = (
@@ -303,6 +304,39 @@ class TraceGuardAgentTests(unittest.TestCase):
         self.assertIn('"name":"list-traces"', sent)
         popen.assert_called_once()
 
+    def test_phoenix_mcp_environment_does_not_inherit_traceguard_secrets(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "PHOENIX_API_KEY": "phoenix-secret",
+                "PHOENIX_CLIENT_HEADERS": "api_key=phoenix-secret",
+                "TRACEGUARD_AUTH_TOKEN": "traceguard-secret",
+                "GOOGLE_APPLICATION_CREDENTIALS": "credential-path",
+            },
+            clear=True,
+        ):
+            config = RuntimeConfig.from_env()
+            env = _mcp_environment(config)
+
+        self.assertEqual(env["PHOENIX_API_KEY"], "phoenix-secret")
+        self.assertEqual(env["PHOENIX_CLIENT_HEADERS"], "api_key=phoenix-secret")
+        self.assertNotIn("TRACEGUARD_AUTH_TOKEN", env)
+        self.assertNotIn("GOOGLE_APPLICATION_CREDENTIALS", env)
+
+    def test_phoenix_mcp_error_redacts_configured_secrets(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "PHOENIX_API_KEY": "phoenix-secret",
+                "TRACEGUARD_AUTH_TOKEN": "traceguard-secret",
+            },
+        ):
+            message = _safe_error(RuntimeError("failed with phoenix-secret and traceguard-secret"))
+
+        self.assertNotIn("phoenix-secret", message)
+        self.assertNotIn("traceguard-secret", message)
+        self.assertEqual(message.count("[redacted]"), 2)
+
     def test_phoenix_mcp_authentication_html_is_not_counted_as_query_success(self) -> None:
         context = TraceContext(
             run_id="run-1",
@@ -327,6 +361,7 @@ class TraceGuardAgentTests(unittest.TestCase):
             phoenix_mcp_command="phoenix-mcp",
             phoenix_mcp_timeout_seconds=1,
             traceguard_auth_configured=True,
+            traceguard_auth_required=True,
             traceguard_auth_session_seconds=3600,
         )
         stdout = (
@@ -393,6 +428,7 @@ class TraceGuardAgentTests(unittest.TestCase):
             phoenix_mcp_command="phoenix-mcp",
             phoenix_mcp_timeout_seconds=1,
             traceguard_auth_configured=True,
+            traceguard_auth_required=True,
             traceguard_auth_session_seconds=3600,
         )
         stdout = (
@@ -438,6 +474,7 @@ class TraceGuardAgentTests(unittest.TestCase):
             phoenix_mcp_command="npx -y @arizeai/phoenix-mcp@latest",
             phoenix_mcp_timeout_seconds=1,
             traceguard_auth_configured=True,
+            traceguard_auth_required=True,
             traceguard_auth_session_seconds=3600,
         )
 

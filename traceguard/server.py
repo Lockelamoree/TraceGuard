@@ -108,6 +108,16 @@ class TraceGuardHandler(BaseHTTPRequestHandler):
         if not config.enabled:
             self._send_json(200, {"enabled": False, "authenticated": True})
             return
+        if not config.ready:
+            self._send_json(
+                503,
+                {
+                    "enabled": True,
+                    "authenticated": False,
+                    "error": "authentication is required but no access key is configured",
+                },
+            )
+            return
         payload = self._read_json_body(max_bytes=16_384)
         candidate = payload.get("token") or payload.get("password") or ""
         client_key = self._client_key()
@@ -193,8 +203,7 @@ class TraceGuardHandler(BaseHTTPRequestHandler):
         return True
 
     def _client_key(self) -> str:
-        forwarded_for = self.headers.get("x-forwarded-for", "").split(",", 1)[0].strip()
-        return forwarded_for or self.client_address[0]
+        return self.client_address[0]
 
     def _send_json(self, status: int, payload: dict, headers: dict[str, str] | None = None) -> None:
         self._send(status, json.dumps(payload).encode("utf-8"), "application/json", headers=headers)

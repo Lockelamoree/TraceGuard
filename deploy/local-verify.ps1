@@ -2,6 +2,7 @@ param(
   [string]$ServiceName = "traceguard",
   [string]$ImageTag = "",
   [int]$LocalPort = 18080,
+  [string]$LocalAuthToken = "traceguard-local-verify-token",
   [switch]$SkipDockerBuild
 )
 
@@ -62,6 +63,8 @@ try {
   docker run --rm -d `
     --name $containerName `
     -p "127.0.0.1:$LocalPort`:8080" `
+    -e TRACEGUARD_REQUIRE_AUTH=true `
+    -e "TRACEGUARD_AUTH_TOKEN=$LocalAuthToken" `
     $ImageTag | Out-Null
   Assert-LastCommand "docker run"
 
@@ -80,7 +83,19 @@ try {
   Assert-Content "TraceGuard app.js" $appJs.Content "gemini_validation_status"
   Assert-Content "TraceGuard app.js" $appJs.Content "unsupported_confirmed_claims"
 
-  Write-Host "5. Running local agent smoke test..."
+  Write-Host "5. Authenticating and running local agent smoke test..."
+  $loginBody = @{ token = $LocalAuthToken } | ConvertTo-Json -Depth 3
+  $loginBodyBytes = [Text.Encoding]::UTF8.GetBytes($loginBody)
+  $login = Invoke-RestMethod -Uri "$baseUrl/api/auth/login" `
+    -Method Post `
+    -ContentType "application/json; charset=utf-8" `
+    -Body $loginBodyBytes `
+    -SessionVariable authSession `
+    -TimeoutSec 10
+  if (-not $login.authenticated) {
+    throw "Local auth smoke test did not return an authenticated session."
+  }
+
   $sample = Get-Content -Raw (Join-Path $repo "samples\gcp_incident_bundle.txt")
   $body = @{ evidence_text = $sample; mode = "improved" } | ConvertTo-Json -Depth 3
   $bodyBytes = [Text.Encoding]::UTF8.GetBytes($body)
@@ -88,6 +103,7 @@ try {
     -Method Post `
     -ContentType "application/json; charset=utf-8" `
     -Body $bodyBytes `
+    -WebSession $authSession `
     -TimeoutSec 30
 
   if ($result.mode -ne "improved") {

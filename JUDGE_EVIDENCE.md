@@ -42,7 +42,7 @@ Latest local verification I ran on May 31, 2026:
 python -m unittest discover -s tests -p "test_*.py"
 ```
 
-Result: `29` tests passed. In my local Codex shell, `python` and `py -3.11` were not on PATH, so I ran the same command with the bundled Python runtime. That does not change the app requirement; a normal Python 3.11+ install can run the suite.
+Result: `33` tests passed. In my local Codex shell, `python` and `py -3.11` were not on PATH, so I ran the same command with the bundled Python runtime. That does not change the app requirement; a normal Python 3.11+ install can run the suite.
 
 ## Hosted Verification
 

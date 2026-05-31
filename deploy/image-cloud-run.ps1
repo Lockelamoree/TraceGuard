@@ -9,7 +9,7 @@ param(
   [string]$PhoenixSecretName = "traceguard-phoenix-api-key",
   [string]$AuthSecretName = "traceguard-auth-token",
   [string]$PhoenixBaseUrl = "https://app.phoenix.arize.com",
-  [string]$PhoenixCollectorEndpoint = "https://app.phoenix.arize.com",
+  [string]$PhoenixCollectorEndpoint = "",
   [string]$PhoenixMcpCommand = "phoenix-mcp",
   [int]$PhoenixMcpTimeoutSeconds = 12,
   [string]$GeminiModel = "gemini-2.5-flash",
@@ -34,6 +34,39 @@ function Assert-LastCommand($Action) {
   if ($LASTEXITCODE -ne 0) {
     throw "$Action failed with exit code $LASTEXITCODE"
   }
+}
+
+function Get-CloudRunEnvVar($Name) {
+  try {
+    $value = & $dockerGcloud run services describe $ServiceName `
+      --project $ProjectId `
+      --region $Region `
+      --format "value(spec.template.spec.containers[0].env[?name='$Name'].value)" 2>$null
+    if ($LASTEXITCODE -ne 0) {
+      return ""
+    }
+    return ($value | Select-Object -First 1)
+  }
+  catch {
+    return ""
+  }
+}
+
+function Resolve-PhoenixCollectorEndpoint($Candidate) {
+  $endpoint = $Candidate.Trim()
+  if (-not $endpoint) {
+    $endpoint = (Get-CloudRunEnvVar "PHOENIX_COLLECTOR_ENDPOINT").Trim()
+    if ($endpoint) {
+      Write-Host "Reusing existing PHOENIX_COLLECTOR_ENDPOINT from Cloud Run."
+    }
+  }
+  if (-not $endpoint) {
+    throw "Phoenix collector endpoint is required for production deploy. Pass -PhoenixCollectorEndpoint 'https://app.phoenix.arize.com/s/traceroute'."
+  }
+  if ($endpoint.TrimEnd("/") -eq "https://app.phoenix.arize.com") {
+    throw "Phoenix collector endpoint must be a space-specific URL, not https://app.phoenix.arize.com."
+  }
+  return $endpoint
 }
 
 if (-not $SkipLocalVerify) {
@@ -77,6 +110,8 @@ if (-not $existingServiceAccount) {
   --role "roles/secretmanager.secretAccessor" `
   --quiet
 
+$PhoenixCollectorEndpoint = Resolve-PhoenixCollectorEndpoint $PhoenixCollectorEndpoint
+
 $token = & $dockerGcloud auth print-access-token
 if (-not $token) {
   throw "No gcloud access token returned"
@@ -100,6 +135,7 @@ $envVars = @(
   "PHOENIX_MCP_SERVER=@arizeai/phoenix-mcp",
   "PHOENIX_COLLECTOR_ENDPOINT=$PhoenixCollectorEndpoint",
   "PHOENIX_MCP_TIMEOUT_SECONDS=$PhoenixMcpTimeoutSeconds",
+  "TRACEGUARD_REQUIRE_AUTH=true",
   "TRACEGUARD_AUTH_SESSION_SECONDS=$AuthSessionSeconds"
 )
 

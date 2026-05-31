@@ -1,4 +1,4 @@
-# TraceGuard Devpost Submission Draft
+# TraceGuard Devpost Submission
 
 ## Project Summary
 

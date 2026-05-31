@@ -17,6 +17,30 @@ MCP_PROTOCOL_VERSION = "2024-11-05"
 PHOENIX_MCP_PACKAGE = "@arizeai/phoenix-mcp"
 PINNED_PACKAGE_PATTERN = re.compile(r"^@arizeai/phoenix-mcp@\d+\.\d+\.\d+$")
 MAX_MCP_MESSAGE_BYTES = 4 * 1024 * 1024
+MCP_PROCESS_ENV_ALLOWLIST = {
+    "APPDATA",
+    "COMSPEC",
+    "HOME",
+    "LOCALAPPDATA",
+    "NODE_PATH",
+    "PATH",
+    "PATHEXT",
+    "SYSTEMROOT",
+    "TEMP",
+    "TMP",
+    "USERPROFILE",
+    "WINDIR",
+}
+MCP_PHOENIX_ENV_ALLOWLIST = {
+    "PHOENIX_API_KEY",
+    "PHOENIX_BASE_URL",
+    "PHOENIX_CLIENT_HEADERS",
+    "PHOENIX_COLLECTOR_ENDPOINT",
+    "PHOENIX_HOST",
+    "PHOENIX_PROJECT",
+    "PHOENIX_PROJECT_NAME",
+}
+SENSITIVE_ENV_NAME_PARTS = ("API_KEY", "AUTH_TOKEN", "CREDENTIAL", "PASSWORD", "SECRET", "TOKEN")
 
 
 @dataclass(frozen=True)
@@ -424,7 +448,11 @@ def _validate_command(parts: list[str]) -> None:
 
 
 def _mcp_environment(config: RuntimeConfig) -> dict[str, str]:
-    env = os.environ.copy()
+    env = {
+        name: value
+        for name, value in os.environ.items()
+        if value and (name.upper() in MCP_PROCESS_ENV_ALLOWLIST or name.upper() in MCP_PHOENIX_ENV_ALLOWLIST)
+    }
     env.setdefault("PHOENIX_BASE_URL", config.phoenix_base_url)
     env.setdefault("PHOENIX_HOST", config.phoenix_base_url)
     env.setdefault("PHOENIX_PROJECT_NAME", config.phoenix_project_name)
@@ -531,7 +559,17 @@ def _stop_process(process: subprocess.Popen[bytes]) -> None:
 
 def _safe_error(exc: Exception) -> str:
     message = str(exc)
-    secret = os.getenv("PHOENIX_API_KEY", "")
-    if secret:
+    for secret in _configured_secret_values():
         message = message.replace(secret, "[redacted]")
     return message[:500]
+
+
+def _configured_secret_values() -> tuple[str, ...]:
+    secrets: set[str] = set()
+    for name, value in os.environ.items():
+        if len(value) < 6:
+            continue
+        upper_name = name.upper()
+        if any(part in upper_name for part in SENSITIVE_ENV_NAME_PARTS):
+            secrets.add(value)
+    return tuple(sorted(secrets, key=len, reverse=True))

@@ -19,6 +19,7 @@ class RuntimeConfig:
     phoenix_mcp_command: str
     phoenix_mcp_timeout_seconds: float
     traceguard_auth_configured: bool
+    traceguard_auth_required: bool
     traceguard_auth_session_seconds: int
 
     @classmethod
@@ -41,6 +42,7 @@ class RuntimeConfig:
             phoenix_mcp_command=os.getenv("PHOENIX_MCP_COMMAND", "").strip(),
             phoenix_mcp_timeout_seconds=_float_env("PHOENIX_MCP_TIMEOUT_SECONDS", default=4.0),
             traceguard_auth_configured=bool(os.getenv("TRACEGUARD_AUTH_TOKEN", "").strip()),
+            traceguard_auth_required=_bool_env("TRACEGUARD_REQUIRE_AUTH", default=False),
             traceguard_auth_session_seconds=auth_session_seconds,
         )
 
@@ -59,6 +61,7 @@ class RuntimeConfig:
             "phoenix_mcp_command_configured": bool(self.phoenix_mcp_command),
             "phoenix_mcp_timeout_seconds": self.phoenix_mcp_timeout_seconds,
             "traceguard_auth_configured": self.traceguard_auth_configured,
+            "traceguard_auth_required": self.traceguard_auth_required,
             "traceguard_auth_session_seconds": self.traceguard_auth_session_seconds,
         }
 

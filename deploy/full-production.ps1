@@ -37,6 +37,15 @@ function Read-Required($Prompt, $Default = "") {
   return $value
 }
 
+function Read-YesNo($Prompt, [bool]$Default = $false) {
+  $defaultLabel = if ($Default) { "Y/n" } else { "y/N" }
+  $value = Read-Host "$Prompt [$defaultLabel]"
+  if (-not $value) {
+    return $Default
+  }
+  return $value.Trim().ToLowerInvariant().StartsWith("y")
+}
+
 function Convert-SecureStringToPlainText($SecureString) {
   $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($SecureString)
   try {
@@ -73,20 +82,28 @@ $existingPhoenixSecret = Invoke-Gcloud secrets list `
   --format "value(name)"
 $secretExists = [bool]$existingPhoenixSecret
 
-Write-Host ""
-Write-Host "Paste the Phoenix API key when prompted. It will not be printed."
-$securePhoenixKey = Read-Host "Phoenix API key" -AsSecureString
-$plainPhoenixKey = Convert-SecureStringToPlainText $securePhoenixKey
-try {
-  if ($secretExists) {
-    $plainPhoenixKey | & $dockerGcloud secrets versions add $PhoenixSecretName --data-file=-
-  }
-  else {
-    $plainPhoenixKey | & $dockerGcloud secrets create $PhoenixSecretName --data-file=-
-  }
+if ($secretExists -and -not (Read-YesNo "Existing Phoenix API key secret found. Add a new secret version?" $false)) {
+  Write-Host "Keeping existing Phoenix API key secret."
 }
-finally {
-  $plainPhoenixKey = $null
+else {
+  Write-Host ""
+  Write-Host "Paste the Phoenix API key when prompted. It will not be printed."
+  $securePhoenixKey = Read-Host "Phoenix API key" -AsSecureString
+  $plainPhoenixKey = Convert-SecureStringToPlainText $securePhoenixKey
+  try {
+    if (-not $plainPhoenixKey) {
+      throw "Phoenix API key cannot be empty"
+    }
+    if ($secretExists) {
+      $plainPhoenixKey | & $dockerGcloud secrets versions add $PhoenixSecretName --data-file=-
+    }
+    else {
+      $plainPhoenixKey | & $dockerGcloud secrets create $PhoenixSecretName --data-file=-
+    }
+  }
+  finally {
+    $plainPhoenixKey = $null
+  }
 }
 
 $existingAuthSecret = Invoke-Gcloud secrets list `
@@ -94,20 +111,28 @@ $existingAuthSecret = Invoke-Gcloud secrets list `
   --format "value(name)"
 $authSecretExists = [bool]$existingAuthSecret
 
-Write-Host ""
-Write-Host "Paste a long TraceGuard access key when prompted. Judges use this to unlock the hosted demo."
-$secureAuthToken = Read-Host "TraceGuard access key" -AsSecureString
-$plainAuthToken = Convert-SecureStringToPlainText $secureAuthToken
-try {
-  if ($authSecretExists) {
-    $plainAuthToken | & $dockerGcloud secrets versions add $AuthSecretName --data-file=-
-  }
-  else {
-    $plainAuthToken | & $dockerGcloud secrets create $AuthSecretName --data-file=-
-  }
+if ($authSecretExists -and -not (Read-YesNo "Existing TraceGuard access key secret found. Add a new secret version?" $false)) {
+  Write-Host "Keeping existing TraceGuard access key secret."
 }
-finally {
-  $plainAuthToken = $null
+else {
+  Write-Host ""
+  Write-Host "Paste a long TraceGuard access key when prompted. Judges use this to unlock the hosted demo."
+  $secureAuthToken = Read-Host "TraceGuard access key" -AsSecureString
+  $plainAuthToken = Convert-SecureStringToPlainText $secureAuthToken
+  try {
+    if (-not $plainAuthToken) {
+      throw "TraceGuard access key cannot be empty"
+    }
+    if ($authSecretExists) {
+      $plainAuthToken | & $dockerGcloud secrets versions add $AuthSecretName --data-file=-
+    }
+    else {
+      $plainAuthToken | & $dockerGcloud secrets create $AuthSecretName --data-file=-
+    }
+  }
+  finally {
+    $plainAuthToken = $null
+  }
 }
 
 & $cloudRunDeploy `

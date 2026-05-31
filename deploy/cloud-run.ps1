@@ -42,6 +42,38 @@ function Invoke-Gcloud {
     gcloud @args
 }
 
+function Get-CloudRunEnvVar($Name) {
+  try {
+    $value = Invoke-Gcloud run services describe $ServiceName `
+      --region $Region `
+      --format "value(spec.template.spec.containers[0].env[?name='$Name'].value)" 2>$null
+    if ($LASTEXITCODE -ne 0) {
+      return ""
+    }
+    return ($value | Select-Object -First 1)
+  }
+  catch {
+    return ""
+  }
+}
+
+function Resolve-PhoenixCollectorEndpoint($Candidate) {
+  $endpoint = $Candidate.Trim()
+  if (-not $endpoint) {
+    $endpoint = (Get-CloudRunEnvVar "PHOENIX_COLLECTOR_ENDPOINT").Trim()
+    if ($endpoint) {
+      Write-Host "Reusing existing PHOENIX_COLLECTOR_ENDPOINT from Cloud Run."
+    }
+  }
+  if (-not $endpoint) {
+    throw "Phoenix collector endpoint is required for production deploy. Pass -PhoenixCollectorEndpoint 'https://app.phoenix.arize.com/s/traceroute'."
+  }
+  if ($endpoint.TrimEnd("/") -eq "https://app.phoenix.arize.com") {
+    throw "Phoenix collector endpoint must be a space-specific URL, not https://app.phoenix.arize.com."
+  }
+  return $endpoint
+}
+
 if (-not $SkipLocalVerify) {
   & $localVerify -ServiceName $ServiceName -LocalPort $LocalVerifyPort
 }
@@ -98,6 +130,8 @@ Invoke-Gcloud secrets add-iam-policy-binding $AuthSecretName `
   --role "roles/secretmanager.secretAccessor" `
   --quiet
 
+$PhoenixCollectorEndpoint = Resolve-PhoenixCollectorEndpoint $PhoenixCollectorEndpoint
+
 $envVars = @(
   "GOOGLE_CLOUD_PROJECT=$ProjectId",
   "GOOGLE_CLOUD_LOCATION=$GoogleCloudLocation",
@@ -107,13 +141,12 @@ $envVars = @(
   "PHOENIX_PROJECT_NAME=traceguard-hackathon",
   "PHOENIX_BASE_URL=$PhoenixBaseUrl",
   "PHOENIX_MCP_SERVER=@arizeai/phoenix-mcp",
+  "PHOENIX_COLLECTOR_ENDPOINT=$PhoenixCollectorEndpoint",
   "PHOENIX_MCP_TIMEOUT_SECONDS=$PhoenixMcpTimeoutSeconds",
+  "TRACEGUARD_REQUIRE_AUTH=true",
   "TRACEGUARD_AUTH_SESSION_SECONDS=$AuthSessionSeconds"
 )
 
-if ($PhoenixCollectorEndpoint) {
-  $envVars += "PHOENIX_COLLECTOR_ENDPOINT=$PhoenixCollectorEndpoint"
-}
 if ($PhoenixMcpCommand) {
   $envVars += "PHOENIX_MCP_COMMAND=$PhoenixMcpCommand"
 }

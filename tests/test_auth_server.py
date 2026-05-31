@@ -23,6 +23,7 @@ class TraceGuardAuthServerTests(unittest.TestCase):
                 "ENABLE_GEMINI_SYNTHESIS": "",
                 "PHOENIX_API_KEY": "",
                 "PHOENIX_COLLECTOR_ENDPOINT": "",
+                "TRACEGUARD_REQUIRE_AUTH": "",
             },
         )
         self.env_patch.start()
@@ -76,6 +77,36 @@ class TraceGuardAuthServerTests(unittest.TestCase):
 
         status, _, _ = self.request("/api/auth/login", method="POST", body={"token": "local-test-token"})
         self.assertEqual(status, 200)
+
+    def test_login_throttling_ignores_spoofed_forwarded_for(self) -> None:
+        for index in range(server_module.LOGIN_FAILURE_LIMIT - 1):
+            status, _, _ = self.request(
+                "/api/auth/login",
+                method="POST",
+                body={"token": "wrong"},
+                headers={"X-Forwarded-For": f"203.0.113.{index}"},
+            )
+            self.assertEqual(status, 401)
+
+        status, headers, _ = self.request(
+            "/api/auth/login",
+            method="POST",
+            body={"token": "wrong"},
+            headers={"X-Forwarded-For": "203.0.113.250"},
+        )
+        self.assertEqual(status, 429)
+        self.assertIn("Retry-After", headers)
+
+    def test_required_auth_fails_closed_when_token_is_missing(self) -> None:
+        with patch.dict(os.environ, {"TRACEGUARD_AUTH_TOKEN": "", "TRACEGUARD_REQUIRE_AUTH": "true"}):
+            status, _, body = self.request("/api/auth/status")
+            self.assertEqual(status, 200)
+            self.assertIn('"enabled": true', body)
+            self.assertIn('"authenticated": false', body)
+            self.assertEqual(self.request("/api/runtime")[0], 401)
+            login_status, _, login_body = self.request("/api/auth/login", method="POST", body={"token": "anything"})
+            self.assertEqual(login_status, 503)
+            self.assertIn("no access key is configured", login_body)
 
     def test_authenticated_analyze_rejects_cross_origin_posts(self) -> None:
         status, headers, _ = self.request("/api/auth/login", method="POST", body={"token": "local-test-token"})

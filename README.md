@@ -164,6 +164,7 @@ Production environment variables:
 - `PHOENIX_MCP_COMMAND`: Optional stdio command used for live read-only MCP introspection. The production image preinstalls `@arizeai/phoenix-mcp@4.0.13`, so `phoenix-mcp` is the preferred Cloud Run value.
 - `PHOENIX_MCP_TIMEOUT_SECONDS`: Timeout for MCP initialize, tool discovery, and read-only trace/project queries, defaults to 4 seconds locally and 12 seconds in deploy scripts.
 - `TRACEGUARD_AUTH_TOKEN`: Shared access key required before sample data, runtime config, or agent runs are available. Store this in Secret Manager.
+- `TRACEGUARD_REQUIRE_AUTH`: Fail-closed auth guard. Production deploy scripts set this to `true`, so protected routes stay locked if the access key secret is ever missing.
 - `TRACEGUARD_AUTH_SESSION_SECONDS`: Signed browser session lifetime, defaults to 12 hours.
 
 Create the production secrets:
@@ -190,9 +191,11 @@ powershell.exe -ExecutionPolicy Bypass -File .\deploy\image-cloud-run.ps1 `
   -PhoenixCollectorEndpoint "https://app.phoenix.arize.com/s/your-space-name"
 ```
 
-Both `deploy\cloud-run.ps1` and `deploy\image-cloud-run.ps1` run `deploy\local-verify.ps1` before touching Cloud Run. The gate builds the container locally, runs the test suite inside that image, starts it on `127.0.0.1`, checks `/health`, confirms the judge proof UI/JS markers are present, and posts the sample bundle to `/api/analyze`. Production deploy stops if any of those checks fail.
+Both `deploy\cloud-run.ps1` and `deploy\image-cloud-run.ps1` run `deploy\local-verify.ps1` before touching Cloud Run. The gate builds the container locally, runs the test suite inside that image, starts it on `127.0.0.1` with auth required, checks `/health`, confirms the judge proof UI/JS markers are present, logs in with a local verification token, and posts the sample bundle to `/api/analyze`. Production deploy stops if any of those checks fail.
 
-If Google Cloud SDK is not installed locally, use the full production wizard. It uses the Cloud SDK container, stores auth in `.gcloud/`, prompts for the Phoenix key locally, writes it to Secret Manager, and deploys Cloud Run:
+The production deploy scripts also preserve an existing Cloud Run `PHOENIX_COLLECTOR_ENDPOINT` when the flag is omitted, reject the generic `https://app.phoenix.arize.com` root endpoint, and require a Phoenix space-specific URL such as `https://app.phoenix.arize.com/s/your-space-name` for new production deploys.
+
+If Google Cloud SDK is not installed locally, use the full production wizard. It uses the Cloud SDK container, stores auth in `.gcloud/`, preserves existing secrets by default, prompts only when a secret is missing or you choose to rotate it, and deploys Cloud Run:
 
 ```powershell
 powershell.exe -ExecutionPolicy Bypass -File .\deploy\full-production.ps1
@@ -204,7 +207,7 @@ For lower-level gcloud commands through Docker:
 powershell.exe -ExecutionPolicy Bypass -File .\deploy\docker-gcloud.ps1 auth login --no-launch-browser
 ```
 
-The deploy script enables required APIs, creates a least-privilege runtime service account, grants Vertex AI access, grants Secret Manager access only to the Phoenix secret, and deploys Cloud Run with `PHOENIX_API_KEY` mounted from Secret Manager.
+The deploy script enables required APIs, creates a least-privilege runtime service account, grants Vertex AI access, grants Secret Manager access only to the Phoenix and TraceGuard auth secrets, and deploys Cloud Run with `PHOENIX_API_KEY` mounted from Secret Manager.
 
 It also mounts `TRACEGUARD_AUTH_TOKEN` from Secret Manager. Cloud Run remains unauthenticated at the platform layer so judges can reach the URL, but TraceGuard requires the access key before running the agent or reading demo evidence.
 
