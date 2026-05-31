@@ -399,6 +399,54 @@ textarea {
   overflow-wrap: anywhere;
 }
 
+.arize-loop {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 14px;
+}
+
+.loop-card {
+  min-height: 104px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #121a18;
+  padding: 11px;
+}
+
+.loop-card.good {
+  border-color: rgba(105, 219, 124, 0.36);
+  background: rgba(105, 219, 124, 0.07);
+}
+
+.loop-card.warn {
+  border-color: rgba(255, 209, 102, 0.34);
+  background: rgba(255, 209, 102, 0.07);
+}
+
+.loop-card span,
+.loop-card em {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.35;
+}
+
+.loop-card span {
+  color: var(--arize);
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.loop-card strong {
+  display: block;
+  margin: 9px 0 6px;
+  color: var(--text);
+  font-size: 16px;
+  overflow-wrap: anywhere;
+}
+
 .runtime-chip {
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -621,6 +669,10 @@ textarea {
 
   .scoreboard {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .arize-loop {
+    grid-template-columns: 1fr;
   }
 
   h1 {

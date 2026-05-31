@@ -2,6 +2,7 @@ const evidence = document.querySelector("#evidence");
 const summary = document.querySelector("#summary");
 const runtimeDetail = document.querySelector("#runtimeDetail");
 const proofScoreboard = document.querySelector("#proofScoreboard");
+const arizeLoop = document.querySelector("#arizeLoop");
 const geminiBrief = document.querySelector("#geminiBrief");
 const steps = document.querySelector("#steps");
 const findings = document.querySelector("#findings");
@@ -31,6 +32,7 @@ const actionButtons = ["#loadSample", "#runBaseline", "#runImproved"]
 renderDelta();
 renderReportPreview("");
 renderProofScoreboard(null);
+renderArizeLoop(null);
 initialize();
 
 document.querySelector("#loadSample").addEventListener("click", async () => {
@@ -188,6 +190,7 @@ function render(result) {
   lastReport = result.report_markdown || "";
   renderRuntimeFromResult(result);
   renderProofScoreboard(result);
+  renderArizeLoop(result);
   renderReportPreview(lastReport, result.mode);
   renderDelta();
   summary.textContent = `${result.summary} Run mode: ${result.mode}.`;
@@ -233,6 +236,7 @@ function resetRunState() {
   lastReport = "";
   renderReportPreview("");
   renderProofScoreboard(null);
+  renderArizeLoop(null);
   renderDelta();
 }
 
@@ -354,6 +358,72 @@ function renderProofScoreboard(result) {
     ${renderScoreCard("MCP", mcpLabel, "Phoenix read-only path")}
     ${renderScoreCard("Critical/high", Number(metrics.critical_high_count ?? countCriticalHigh(result.findings)), "Priority findings")}
   `;
+}
+
+function renderArizeLoop(result) {
+  if (!result) {
+    arizeLoop.innerHTML = `
+      <article class="loop-card pending">
+        <span>01 Observe</span>
+        <strong>Phoenix pending</strong>
+        <em>Run the agent to verify OTEL and MCP status.</em>
+      </article>
+      <article class="loop-card pending">
+        <span>02 Evaluate</span>
+        <strong>Evals pending</strong>
+        <em>Grounding and report checks appear after analysis.</em>
+      </article>
+      <article class="loop-card pending">
+        <span>03 Improve</span>
+        <strong>Delta pending</strong>
+        <em>Baseline vs improved coverage is shown after both runs.</em>
+      </article>
+    `;
+    return;
+  }
+
+  const metrics = result.metrics || {};
+  const mcp = result.arize?.mcp || {};
+  const otelLive = Boolean(result.arize?.tracing_ready);
+  const queried = Array.isArray(mcp.queried_tool_names) ? mcp.queried_tool_names : [];
+  const evalAverage = Number(metrics.eval_average || avgEvalScore(result.evals));
+  const unsupported = Number(metrics.unsupported_confirmed_claims || 0);
+  const baseline = runState.baseline;
+  const improved = runState.improved || (result.mode === "improved" ? result : null);
+  const improvedOnly = baseline && improved
+    ? improved.findings.filter((finding) => !findingMap(baseline.findings).has(findingKey(finding)))
+    : [];
+  const findingGain = baseline && improved ? improved.findings.length - baseline.findings.length : 0;
+
+  arizeLoop.innerHTML = `
+    <article class="loop-card ${otelLive ? "good" : "warn"}">
+      <span>01 Observe</span>
+      <strong>${otelLive ? "Phoenix OTEL live" : result.arize?.phoenix_enabled ? "Phoenix configured" : "Local replay"}</strong>
+      <em>${escapeHtml(mcp.status === "ok" ? `${Number(mcp.tool_count || 0)} MCP tools, ${queried.length} read query` : mcp.status || "MCP not run")}</em>
+    </article>
+    <article class="loop-card ${unsupported === 0 ? "good" : "warn"}">
+      <span>02 Evaluate</span>
+      <strong>${Math.round(evalAverage * 100)}% eval avg</strong>
+      <em>${unsupported} unsupported confirmed claims; Gemini ${escapeHtml(metrics.gemini_validation_status || result.gemini?.validation_status || "not_run")}.</em>
+    </article>
+    <article class="loop-card ${baseline && improved ? "good" : "warn"}">
+      <span>03 Improve</span>
+      <strong>${baseline && improved ? `${formatSigned(findingGain)} findings` : "Baseline pending"}</strong>
+      <em>${baseline && improved ? improvementSummary(improvedOnly) : "Run improved to show the baseline-to-improved loop."}</em>
+    </article>
+  `;
+}
+
+function improvementSummary(improvedOnly) {
+  if (improvedOnly.length) {
+    const findingIds = [...new Set(improvedOnly.map((finding) => finding.id))];
+    return `Improved-only coverage: ${findingIds.join(", ")}.`;
+  }
+  return "Improved run preserves evidence-grounded coverage.";
+}
+
+function formatSigned(value) {
+  return value > 0 ? `+${value}` : String(value);
 }
 
 function renderScoreCard(label, value, detail) {

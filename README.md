@@ -31,6 +31,16 @@ That is the point of the project: the UI should make the evidence boundary visib
 
 ![TraceGuard local proof scoreboard](docs/screenshots/traceguard-local-proof.png)
 
+Hosted proof crops from the deployed Cloud Run build:
+
+![TraceGuard hosted runtime badges](docs/screenshots/traceguard-hosted-runtime-badges.png)
+
+![TraceGuard hosted proof scoreboard](docs/screenshots/traceguard-hosted-proof-scoreboard.png)
+
+![TraceGuard hosted Arize improvement loop](docs/screenshots/traceguard-hosted-arize-loop.png)
+
+![TraceGuard hosted report evidence](docs/screenshots/traceguard-hosted-report-evidence.png)
+
 Run locally:
 
 ```powershell
@@ -218,6 +228,8 @@ The production tracing path lives in `traceguard/observability.py`. When `PHOENI
 The spans include run mode, evidence count/kinds, finding IDs/severities, eval scores/statuses, Gemini status, MCP status/tool count, and report length. Without Phoenix configuration, the app labels the output as local replay guidance instead of claiming live MCP trace queries.
 
 The live MCP path lives in `traceguard/phoenix_mcp.py`. When OTEL tracing is live and `PHOENIX_MCP_COMMAND` is configured, TraceGuard launches the Phoenix MCP server over stdio, sends a JSON-RPC `initialize`, performs `tools/list`, then attempts read-only Phoenix data queries through `list-projects` and `list-traces` when those tools are exposed. The API and UI report the MCP result as `ok`, `discovery_only`, `command_not_configured`, `tracing_not_ready`, `error`, or `local_replay`. The public runtime endpoint exposes only whether a command is configured, not the command value.
+
+In the UI, the Arize improvement loop is shown as `Observe -> Evaluate -> Improve`: Phoenix OTEL/MCP status proves the observability path, evals show grounding quality, and the baseline/improved delta shows what changed in the agent run.
 
 For the hosted Cloud Run demo, the Docker image preinstalls the pinned MCP package. Use:
 

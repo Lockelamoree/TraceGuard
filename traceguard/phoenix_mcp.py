@@ -271,6 +271,8 @@ def _attempt_read_queries(
             project_hint = _project_hint_from_result(result, config)
         request_id += 1
 
+    if queried:
+        return tuple(queried), counts, ""
     return tuple(queried), counts, "; ".join(errors)[:500]
 
 

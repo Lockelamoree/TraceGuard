@@ -36,13 +36,25 @@ Screenshot proof:
 
 ![TraceGuard local proof scoreboard](docs/screenshots/traceguard-local-proof.png)
 
+Hosted proof crops:
+
+![TraceGuard hosted runtime badges](docs/screenshots/traceguard-hosted-runtime-badges.png)
+
+![TraceGuard hosted proof scoreboard](docs/screenshots/traceguard-hosted-proof-scoreboard.png)
+
+![TraceGuard hosted Arize improvement loop](docs/screenshots/traceguard-hosted-arize-loop.png)
+
+![TraceGuard hosted improvement delta](docs/screenshots/traceguard-hosted-improvement-delta.png)
+
+![TraceGuard hosted report evidence](docs/screenshots/traceguard-hosted-report-evidence.png)
+
 Latest local verification I ran on May 31, 2026:
 
 ```powershell
 python -m unittest discover -s tests -p "test_*.py"
 ```
 
-Result: `33` tests passed. In my local Codex shell, `python` and `py -3.11` were not on PATH, so I ran the same command with the bundled Python runtime. That does not change the app requirement; a normal Python 3.11+ install can run the suite.
+Result: `34` tests passed. In my local Codex shell, `python` and `py -3.11` were not on PATH, so I ran the same command with the bundled Python runtime. That does not change the app requirement; a normal Python 3.11+ install can run the suite.
 
 ## Hosted Verification
 
@@ -56,6 +68,7 @@ Suggested checks:
 - `/api/auth/status` reports auth enabled and authenticated after login.
 - Runtime badges clearly identify whether Gemini, Phoenix OTEL, and Phoenix MCP are live or replay/skipped.
 - If Phoenix MCP is live, the runtime detail reports discovered tools and read-only `list-projects` / `list-traces` query status.
+- The Arize loop panel should show `Phoenix OTEL live`, MCP tool discovery/read-query proof, eval average, unsupported confirmed claim count, Gemini validation, and the baseline-to-improved delta.
 - The proof scoreboard reports runtime duration, eval average, unsupported confirmed claims, Gemini validation status, MCP status, and critical/high count.
 - The final report cites evidence IDs for every confirmed finding.
 
