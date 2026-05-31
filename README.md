@@ -12,6 +12,25 @@ Public project URL: https://traceguard-cnhtsa5yrq-uc.a.run.app
 
 Public repository URL: https://github.com/Lockelamoree/TraceGuard
 
+## Judge Proof in 60 Seconds
+
+If I only had one minute with a judge, I would show this path:
+
+1. Open the hosted app and unlock it with the Devpost judge key.
+2. Click `Load sample`, then `Run agent`.
+3. Check the proof scoreboard in the run console:
+   - Findings: 11 on the deterministic sample.
+   - Critical/high findings: 8.
+   - Eval average: about 94% locally on the sample bundle.
+   - Unsupported confirmed claims: 0.
+   - Gemini validation: `pass` only when a live Gemini brief cites known evidence IDs; `not_run` when Gemini is disabled.
+   - Phoenix MCP: `ok`, `discovery_only`, `local_replay`, or the exact skipped/error state.
+4. Open the final report preview and spot-check that every confirmed finding cites evidence IDs such as `iam-001`, `audit-003`, or `repo-line-065`.
+
+That is the point of the project: the UI should make the evidence boundary visible without asking anyone to trust a black box. Local mode is still useful, but it is not dressed up as live Gemini or live Phoenix. Management may ask for military-grade encryption; TraceGuard asks for receipts.
+
+![TraceGuard local proof scoreboard](docs/screenshots/traceguard-local-proof.png)
+
 Run locally:
 
 ```powershell
@@ -26,6 +45,7 @@ Expected local output:
 - Improved: 11 findings, including 8 critical/high priority issues.
 - Improved-only coverage: `repo-control-gap`.
 - Severity change: public access findings move from high to critical.
+- Proof scoreboard: 0 unsupported confirmed claims and about 94% eval average on the included sample bundle.
 - Local runtime status: Gemini is disabled unless Google Cloud env vars are set; Phoenix/MCP show local replay unless Phoenix env vars are set.
 
 For the hosted demo, use the Devpost judge access key. After login, the runtime badges should make it clear whether Gemini, Phoenix OTEL, and Phoenix MCP are live or skipped/replay.

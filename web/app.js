@@ -1,6 +1,7 @@
 const evidence = document.querySelector("#evidence");
 const summary = document.querySelector("#summary");
 const runtimeDetail = document.querySelector("#runtimeDetail");
+const proofScoreboard = document.querySelector("#proofScoreboard");
 const geminiBrief = document.querySelector("#geminiBrief");
 const steps = document.querySelector("#steps");
 const findings = document.querySelector("#findings");
@@ -29,6 +30,7 @@ const actionButtons = ["#loadSample", "#runBaseline", "#runImproved"]
 
 renderDelta();
 renderReportPreview("");
+renderProofScoreboard(null);
 initialize();
 
 document.querySelector("#loadSample").addEventListener("click", async () => {
@@ -158,7 +160,12 @@ async function loadRuntimeStatus() {
     const phoenixState = status.phoenix_api_key_configured || status.phoenix_collector_endpoint ? "Phoenix configured" : "Phoenix local trace context";
     const mcpState = status.phoenix_mcp_command_configured ? "MCP command ready" : "MCP command unset";
     const authState = status.traceguard_auth_configured ? "Auth on" : "Auth local-off";
-    runtimeStatus.textContent = `${authState} | ${geminiState} | ${phoenixState} | ${mcpState}`;
+    setRuntimeStatus([
+      { label: authState, tone: status.traceguard_auth_configured ? "good" : "info" },
+      { label: geminiState, tone: status.enable_gemini_synthesis && status.google_cloud_project ? "info" : "neutral" },
+      { label: phoenixState, tone: status.phoenix_api_key_configured || status.phoenix_collector_endpoint ? "info" : "neutral" },
+      { label: mcpState, tone: status.phoenix_mcp_command_configured ? "info" : "neutral" },
+    ]);
     runtimeDetail.textContent = [
       status.enable_gemini_synthesis && status.google_cloud_project
         ? "Gemini is configured; live synthesis is confirmed only after a successful run."
@@ -180,6 +187,7 @@ function render(result) {
   rememberRun(result);
   lastReport = result.report_markdown || "";
   renderRuntimeFromResult(result);
+  renderProofScoreboard(result);
   renderReportPreview(lastReport, result.mode);
   renderDelta();
   summary.textContent = `${result.summary} Run mode: ${result.mode}.`;
@@ -224,6 +232,7 @@ function resetRunState() {
   runState.improved = null;
   lastReport = "";
   renderReportPreview("");
+  renderProofScoreboard(null);
   renderDelta();
 }
 
@@ -267,7 +276,20 @@ function renderRuntimeFromResult(result) {
     : result.arize?.mcp?.command_configured
       ? "MCP attempted"
       : "MCP skipped";
-  runtimeStatus.textContent = `${geminiState} | ${phoenixState} | ${mcpState}`;
+  setRuntimeStatus([
+    { label: geminiState, tone: result.gemini?.ok ? "good" : result.gemini?.enabled ? "warn" : "neutral" },
+    { label: phoenixState, tone: result.arize?.tracing_ready ? "good" : result.arize?.phoenix_enabled ? "warn" : "neutral" },
+    {
+      label: mcpState,
+      tone: result.arize?.mcp?.status === "ok"
+        ? "good"
+        : result.arize?.mcp?.status === "discovery_only"
+          ? "info"
+          : result.arize?.mcp?.command_configured
+            ? "warn"
+            : "neutral",
+    },
+  ]);
 
   const geminiDetail = result.gemini?.ok
     ? `Gemini generated a live Vertex AI brief with ${escapeHtml(result.gemini.model || "the configured model")}.`
@@ -299,6 +321,49 @@ function renderReportPreview(report, mode = "") {
   reportPreview.textContent = report || "Run the improved agent to preview the generated markdown report here.";
   reportStatus.textContent = report ? `${formatMode(mode)} report` : "No report yet";
   copyReportButton.disabled = !report;
+}
+
+function renderProofScoreboard(result) {
+  if (!result) {
+    proofScoreboard.innerHTML = `
+      ${renderScoreCard("Runtime", "Pending", "Run the agent")}
+      ${renderScoreCard("Grounding", "Pending", "Evidence IDs required")}
+      ${renderScoreCard("Eval avg", "Pending", "Quality checks")}
+      ${renderScoreCard("MCP", "Pending", "Live status after run")}
+    `;
+    return;
+  }
+
+  const metrics = result.metrics || {};
+  const duration = Number(metrics.duration_ms || 0);
+  const evalAverage = Number(metrics.eval_average || avgEvalScore(result.evals));
+  const unsupported = Number(metrics.unsupported_confirmed_claims || 0);
+  const mcp = result.arize?.mcp || {};
+  const mcpLabel = mcp.status === "ok"
+    ? `${Number(mcp.queried_tool_count || 0)} queries`
+    : mcp.status === "discovery_only"
+      ? `${Number(mcp.tool_count || 0)} tools`
+      : mcp.status || "skipped";
+  const geminiValidation = metrics.gemini_validation_status || result.gemini?.validation_status || "not_run";
+
+  proofScoreboard.innerHTML = `
+    ${renderScoreCard("Runtime", duration ? `${duration} ms` : "Measured", "End-to-end agent run")}
+    ${renderScoreCard("Grounding", `${unsupported} unsupported`, "Confirmed claims")}
+    ${renderScoreCard("Eval avg", `${Math.round(evalAverage * 100)}%`, "Report quality")}
+    ${renderScoreCard("Gemini", geminiValidation, "Evidence-ID validator")}
+    ${renderScoreCard("MCP", mcpLabel, "Phoenix read-only path")}
+    ${renderScoreCard("Critical/high", Number(metrics.critical_high_count ?? countCriticalHigh(result.findings)), "Priority findings")}
+  `;
+}
+
+function renderScoreCard(label, value, detail) {
+  return `
+    <article class="score-card">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+      <em>${escapeHtml(detail)}</em>
+    </article>
+  `;
 }
 
 function renderDelta() {
@@ -446,6 +511,12 @@ function severityRank(severity) {
 
 function formatMode(mode) {
   return mode ? `${mode.charAt(0).toUpperCase()}${mode.slice(1)}` : "Latest";
+}
+
+function setRuntimeStatus(items) {
+  runtimeStatus.innerHTML = items.map(({ label, tone }) => (
+    `<span class="runtime-chip ${escapeHtml(tone || "neutral")}">${escapeHtml(label)}</span>`
+  )).join("");
 }
 
 function escapeHtml(value) {

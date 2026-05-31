@@ -25,7 +25,8 @@ Judge access: if the hosted app asks for an access key, use the temporary judge 
    - Improved: 11 findings.
    - Public access moves to critical.
    - Disabled branch protection and secret scanning become explicit repo-control findings.
-6. Open the final report preview and check that confirmed findings cite evidence IDs.
+6. Check the proof scoreboard: eval average, unsupported confirmed claims, Gemini validation, Phoenix MCP status, runtime duration, and critical/high count.
+7. Open the final report preview and check that confirmed findings cite evidence IDs.
 
 Local command:
 
@@ -75,6 +76,7 @@ More detail lives in `PROJECT_VISUALIZATION.md`.
 - Produces a report where every confirmed finding cites evidence IDs.
 - Shows a baseline run and an improved run so the delta is visible.
 - Runs evals for evidence grounding, confirmed-claim hygiene, detection usefulness, remediation usefulness, severity calibration, and duplicate pressure.
+- Shows a proof scoreboard so the judge can see the run metrics without reading the whole report: unsupported confirmed claims, eval average, runtime duration, Gemini validation, MCP status, and critical/high count.
 - Renders the final report in-app and keeps a clipboard export for handoff.
 
 ## Technologies Used
@@ -93,6 +95,8 @@ I treated observability as part of the agent loop, not a screenshot at the end. 
 In production mode, Phoenix/OpenTelemetry receives run metadata such as evidence mix, finding IDs/severities, eval scores, Gemini status, MCP status/tool count, read-only MCP query names, and report length. When `PHOENIX_MCP_COMMAND` is configured and OTEL is live, TraceGuard starts the Phoenix MCP server over stdio, initializes a JSON-RPC session, performs `tools/list`, then attempts read-only `list-projects` and `list-traces` queries. In local no-credential mode, the app labels the Phoenix step as replay/demo output instead of pretending live trace queries happened.
 
 The improved run shows how eval feedback changes the checklist: public access is promoted from high to critical confidence, and disabled repository controls become explicit findings instead of staying buried in raw evidence.
+
+I also added a small guardrail for the live Gemini brief: the narrative is shown only if it cites evidence IDs known to the deterministic run. Unsupported evidence-like references are rejected and the UI reports the validation state. The deterministic findings still remain the source of truth either way.
 
 For hosted deployment, configure:
 

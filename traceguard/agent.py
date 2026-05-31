@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import asdict
 
 from .evals import run_evals
@@ -14,40 +15,50 @@ from .scoring import severity_score
 
 
 def analyze_bundle(raw: str, mode: str = "improved") -> dict:
+    run_started = time.perf_counter()
+    timings_ms: dict[str, float] = {}
     mode = "baseline" if mode == "baseline" else "improved"
     context = new_trace_context()
     steps: list[AgentStep] = []
     span_context = {"traceguard.run_mode": mode}
+    started = time.perf_counter()
     with trace_span(context, "parse_evidence", span_context) as span:
         evidence = parse_evidence_bundle(raw)
         evidence_attrs = _evidence_span_attributes(evidence)
         for key, value in evidence_attrs.items():
             span.set_attribute(key, value)
         span.add_event("traceguard.evidence.parsed", evidence_attrs)
+    timings_ms["parse"] = _elapsed_ms(started)
     steps.append(AgentStep("Recon", "complete", f"Parsed {len(evidence)} evidence items from the bundle."))
 
+    started = time.perf_counter()
     with trace_span(context, "derive_findings", span_context) as span:
         findings = derive_findings(evidence, improved=mode == "improved")
         finding_attrs = _finding_span_attributes(findings)
         for key, value in finding_attrs.items():
             span.set_attribute(key, value)
         span.add_event("traceguard.findings.derived", finding_attrs)
+    timings_ms["findings"] = _elapsed_ms(started)
     steps.append(AgentStep("Enumeration", "complete", "Mapped audit, IAM, Terraform, alert, and repo signals."))
     steps.append(AgentStep("Validation", "complete", "Kept confirmed findings tied to explicit evidence IDs."))
 
+    started = time.perf_counter()
     with trace_span(context, "run_evals", span_context) as span:
         evals = run_evals(findings, evidence)
         eval_attrs = _eval_span_attributes(evals)
         for key, value in eval_attrs.items():
             span.set_attribute(key, value)
         span.add_event("traceguard.evals.completed", eval_attrs)
+    timings_ms["evals"] = _elapsed_ms(started)
 
+    started = time.perf_counter()
     with trace_span(context, "gemini_synthesis", span_context) as span:
         gemini = synthesize_incident_brief(findings, evidence, evals, mode)
         gemini_attrs = _gemini_span_attributes(gemini)
         for key, value in gemini_attrs.items():
             span.set_attribute(key, value)
         span.add_event("traceguard.gemini.status", gemini_attrs)
+    timings_ms["gemini"] = _elapsed_ms(started)
     if gemini["enabled"]:
         steps.append(
             AgentStep(
@@ -56,18 +67,29 @@ def analyze_bundle(raw: str, mode: str = "improved") -> dict:
                 str(gemini["detail"]),
             )
         )
+    started = time.perf_counter()
     with trace_span(context, "phoenix_mcp_introspection", span_context) as span:
         mcp = inspect_phoenix_mcp(context, improved=mode == "improved")
         mcp_attrs = _mcp_span_attributes(mcp)
         for key, value in mcp_attrs.items():
             span.set_attribute(key, value)
         span.add_event("traceguard.phoenix_mcp.completed", mcp_attrs)
+    timings_ms["phoenix_mcp"] = _elapsed_ms(started)
     steps.append(AgentStep("Phoenix MCP introspection", mcp.step_status, mcp.summary))
     steps.append(AgentStep("Report", "complete", f"Generated {len(findings)} findings and {len(evals)} quality evals."))
 
+    metrics = _run_metrics(run_started, timings_ms, evidence, findings, evals, gemini)
+    started = time.perf_counter()
     with trace_span(context, "render_report", span_context) as span:
-        report_markdown = render_markdown_report(findings, evidence, evals, str(gemini.get("text", "")))
+        report_markdown = render_markdown_report(findings, evidence, evals, str(gemini.get("text", "")), metrics)
+        timings_ms["report"] = _elapsed_ms(started)
+        metrics["duration_ms"] = _elapsed_ms(run_started)
+        metrics["timings_ms"] = dict(timings_ms)
+        metrics["report_length"] = len(report_markdown)
         report_attrs = {"traceguard.report_length": len(report_markdown)}
+        for key, value in _metric_span_attributes(metrics).items():
+            span.set_attribute(key, value)
+            report_attrs[key] = value
         span.set_attribute("traceguard.report_length", len(report_markdown))
         span.add_event("traceguard.report.rendered", report_attrs)
 
@@ -80,6 +102,7 @@ def analyze_bundle(raw: str, mode: str = "improved") -> dict:
         "findings": [finding_to_dict(finding) for finding in findings],
         "evals": [asdict(item) for item in evals],
         "gemini": gemini,
+        "metrics": metrics,
         "report_markdown": report_markdown,
         "arize": {
             "phoenix_project": context.phoenix_project,
@@ -245,6 +268,9 @@ def _gemini_span_attributes(gemini: dict[str, object]) -> dict[str, object]:
         "traceguard.gemini_configured": bool(gemini.get("configured")),
         "traceguard.gemini_model": str(gemini.get("model", "")),
         "traceguard.gemini_detail": str(gemini.get("detail", ""))[:300],
+        "traceguard.gemini_validation_status": str(gemini.get("validation_status", "not_run")),
+        "traceguard.gemini_accepted_claims": int(gemini.get("accepted_claims", 0) or 0),
+        "traceguard.gemini_rejected_claims": int(gemini.get("rejected_claims", 0) or 0),
     }
 
 
@@ -266,6 +292,51 @@ def _mcp_span_attributes(mcp: PhoenixMcpResult) -> dict[str, object]:
 def _attribute_suffix(name: str) -> str:
     suffix = "".join(char if char.isalnum() else "_" for char in name.lower()).strip("_")
     return suffix or "unnamed"
+
+
+def _run_metrics(
+    run_started: float,
+    timings_ms: dict[str, float],
+    evidence: list[EvidenceItem],
+    findings: list[Finding],
+    evals: list[EvalResult],
+    gemini: dict[str, object],
+) -> dict[str, object]:
+    evidence_ids = {item.id for item in evidence}
+    unsupported_confirmed = [
+        finding.id
+        for finding in findings
+        if finding.status == "confirmed"
+        and (not finding.evidence_ids or not set(finding.evidence_ids).issubset(evidence_ids))
+    ]
+    critical_high = [finding for finding in findings if finding.severity in {"critical", "high"}]
+    eval_average = sum(item.score for item in evals) / len(evals) if evals else 0.0
+    return {
+        "duration_ms": _elapsed_ms(run_started),
+        "timings_ms": dict(timings_ms),
+        "evidence_count": len(evidence),
+        "finding_count": len(findings),
+        "critical_high_count": len(critical_high),
+        "eval_average": round(eval_average, 2),
+        "unsupported_confirmed_claims": len(unsupported_confirmed),
+        "unsupported_confirmed_finding_ids": unsupported_confirmed,
+        "gemini_validation_status": str(gemini.get("validation_status", "not_run")),
+        "gemini_accepted_claims": int(gemini.get("accepted_claims", 0) or 0),
+        "gemini_rejected_claims": int(gemini.get("rejected_claims", 0) or 0),
+    }
+
+
+def _metric_span_attributes(metrics: dict[str, object]) -> dict[str, object]:
+    return {
+        "traceguard.run_duration_ms": metrics.get("duration_ms", 0),
+        "traceguard.unsupported_confirmed_claims": metrics.get("unsupported_confirmed_claims", 0),
+        "traceguard.eval_average": metrics.get("eval_average", 0),
+        "traceguard.critical_high_count": metrics.get("critical_high_count", 0),
+    }
+
+
+def _elapsed_ms(started: float) -> float:
+    return round((time.perf_counter() - started) * 1000, 2)
 
 
 def _finding(

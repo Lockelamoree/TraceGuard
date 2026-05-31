@@ -8,6 +8,7 @@ def render_markdown_report(
     evidence: list[EvidenceItem],
     evals: list[EvalResult],
     gemini_brief: str = "",
+    metrics: dict[str, object] | None = None,
 ) -> str:
     evidence_by_id = {item.id: item for item in evidence}
     lines = [
@@ -21,6 +22,18 @@ def render_markdown_report(
     ]
     if gemini_brief.strip():
         lines.extend(["## Gemini Incident Commander Brief", gemini_brief.strip(), ""])
+    if metrics:
+        lines.extend(
+            [
+                "## Run Metrics",
+                f"- Duration: {metrics.get('duration_ms', 'n/a')} ms",
+                f"- Critical/high findings: {metrics.get('critical_high_count', 'n/a')}",
+                f"- Eval average: {metrics.get('eval_average', 'n/a')}",
+                f"- Unsupported confirmed claims: {metrics.get('unsupported_confirmed_claims', 'n/a')}",
+                f"- Gemini validation: {metrics.get('gemini_validation_status', 'not_run')}",
+                "",
+            ]
+        )
     lines.append("## Findings")
     if not findings:
         lines.append("- No confirmed findings. Treat this as inconclusive, not clean.")

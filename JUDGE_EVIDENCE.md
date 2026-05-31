@@ -28,8 +28,21 @@ Expected local outputs:
 
 - Baseline summary: `9 findings produced, including 8 critical/high priority issues.`
 - Improved summary: `11 findings produced, including 8 critical/high priority issues.`
+- Proof scoreboard on the included sample: `10` evidence items, `11` findings, `8` critical/high findings, eval average around `0.94`, and `0` unsupported confirmed claims.
 - Local Gemini detail: `Gemini synthesis disabled; deterministic findings still produced.`
 - Local Phoenix MCP status: `local_replay`.
+
+Screenshot proof:
+
+![TraceGuard local proof scoreboard](docs/screenshots/traceguard-local-proof.png)
+
+Latest local verification I ran on May 31, 2026:
+
+```powershell
+python -m unittest discover -s tests -p "test_*.py"
+```
+
+Result: `29` tests passed. In my local Codex shell, `python` and `py -3.11` were not on PATH, so I ran the same command with the bundled Python runtime. That does not change the app requirement; a normal Python 3.11+ install can run the suite.
 
 ## Hosted Verification
 
@@ -43,6 +56,7 @@ Suggested checks:
 - `/api/auth/status` reports auth enabled and authenticated after login.
 - Runtime badges clearly identify whether Gemini, Phoenix OTEL, and Phoenix MCP are live or replay/skipped.
 - If Phoenix MCP is live, the runtime detail reports discovered tools and read-only `list-projects` / `list-traces` query status.
+- The proof scoreboard reports runtime duration, eval average, unsupported confirmed claims, Gemini validation status, MCP status, and critical/high count.
 - The final report cites evidence IDs for every confirmed finding.
 
 ## Claims Boundaries

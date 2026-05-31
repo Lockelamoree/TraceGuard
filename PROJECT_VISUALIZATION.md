@@ -55,11 +55,11 @@ flowchart LR
 | `traceguard/parsers.py` | Turns mixed evidence into structured records. | It does not infer compromise on its own. |
 | `traceguard/agent.py` | Orchestrates parsing, findings, evals, Gemini, MCP, and reporting. | It does not let Gemini create findings from scratch. |
 | `traceguard/evals.py` | Checks grounding, claim hygiene, detection quality, remediation quality, severity, and duplicates. | It does not replace human review. |
-| `traceguard/gemini_adapter.py` | Adds optional hosted narrative synthesis through Gemini. | It is disabled locally unless Google Cloud env vars are configured. |
+| `traceguard/gemini_adapter.py` | Adds optional hosted narrative synthesis through Gemini and rejects live briefs that do not cite known evidence IDs. | It is disabled locally unless Google Cloud env vars are configured, and it does not create findings. |
 | `traceguard/observability.py` | Sends Phoenix/OpenTelemetry spans when configured. | It does not claim live tracing in local replay mode. |
 | `traceguard/phoenix_mcp.py` | Starts a pinned Phoenix MCP command, performs `initialize` + `tools/list`, then attempts read-only `list-projects` and `list-traces`. | It does not yet use historical traces to drive autonomous replanning. |
 | `traceguard/report.py` | Produces the markdown incident report. | It does not remove evidence IDs from confirmed findings. |
-| `web/` | Gives judges and reviewers a small UI for loading evidence, running baseline/improved, and copying the report. | It is not a SIEM replacement. |
+| `web/` | Gives judges and reviewers a small UI for loading evidence, running baseline/improved, checking the proof scoreboard, and copying the report. | It is not a SIEM replacement. |
 
 ## Current Boundary
 

@@ -108,6 +108,9 @@ class TraceGuardAgentTests(unittest.TestCase):
         self.assertTrue(any(finding["severity"] == "critical" for finding in result["findings"]))
         self.assertTrue(all(finding["status"] == "confirmed" for finding in result["findings"]))
         self.assertTrue(all(finding["evidence_ids"] for finding in result["findings"]))
+        self.assertEqual(result["metrics"]["unsupported_confirmed_claims"], 0)
+        self.assertGreater(result["metrics"]["duration_ms"], 0)
+        self.assertGreaterEqual(result["metrics"]["eval_average"], 0.8)
         self.assertIn("gemini", result)
         self.assertFalse(result["gemini"]["enabled"])
 
@@ -517,6 +520,49 @@ class TraceGuardAgentTests(unittest.TestCase):
         self.assertTrue(result["gemini"]["enabled"])
         self.assertFalse(result["gemini"]["ok"])
         self.assertIn("Gemini synthesis", [step["name"] for step in result["steps"]])
+
+    def test_gemini_brief_without_evidence_ids_is_rejected(self) -> None:
+        raw = '{"bindings":[{"role":"roles/run.invoker","members":["allUsers"]}]}'
+        with patch.dict(
+            os.environ,
+            {
+                "GOOGLE_CLOUD_PROJECT": "traceguard-prod",
+                "ENABLE_GEMINI_SYNTHESIS": "true",
+                "PHOENIX_API_KEY": "",
+                "PHOENIX_COLLECTOR_ENDPOINT": "",
+            },
+        ), patch(
+            "traceguard.gemini_adapter._call_google_genai",
+            return_value="Confirmed public access exists and should be fixed.",
+        ):
+            result = analyze_bundle(raw, "improved")
+
+        self.assertTrue(result["gemini"]["enabled"])
+        self.assertFalse(result["gemini"]["ok"])
+        self.assertEqual(result["gemini"]["validation_status"], "fail")
+        self.assertGreater(result["gemini"]["rejected_claims"], 0)
+        self.assertNotIn("Gemini Incident Commander Brief", result["report_markdown"])
+
+    def test_gemini_brief_with_known_evidence_id_is_accepted(self) -> None:
+        raw = '{"bindings":[{"role":"roles/run.invoker","members":["allUsers"]}]}'
+        with patch.dict(
+            os.environ,
+            {
+                "GOOGLE_CLOUD_PROJECT": "traceguard-prod",
+                "ENABLE_GEMINI_SYNTHESIS": "true",
+                "PHOENIX_API_KEY": "",
+                "PHOENIX_COLLECTOR_ENDPOINT": "",
+            },
+        ), patch(
+            "traceguard.gemini_adapter._call_google_genai",
+            return_value="Priority: confirmed public access from iam-001. Immediate action: remove allUsers.",
+        ):
+            result = analyze_bundle(raw, "improved")
+
+        self.assertTrue(result["gemini"]["ok"])
+        self.assertEqual(result["gemini"]["validation_status"], "pass")
+        self.assertEqual(result["gemini"]["rejected_claims"], 0)
+        self.assertIn("Gemini Incident Commander Brief", result["report_markdown"])
 
     def test_analyze_json_accepts_utf8_bom(self) -> None:
         body = b'\xef\xbb\xbf{"evidence_text":"{}", "mode":"improved"}'
