@@ -74,9 +74,21 @@ try {
     throw "Local health check returned unexpected body: $($health.Content)"
   }
 
+  Invoke-WebRequest -UseBasicParsing -Method Head -Uri "$baseUrl/" -TimeoutSec 10 | Out-Null
+  Invoke-WebRequest -UseBasicParsing -Method Head -Uri "$baseUrl/proof" -TimeoutSec 10 | Out-Null
+
+  $proof = Invoke-WebRequest -UseBasicParsing -Uri "$baseUrl/proof" -TimeoutSec 10
+  Assert-Content "TraceGuard proof endpoint" $proof.Content '"project"\s*:\s*"TraceGuard"'
+  Assert-Content "TraceGuard proof endpoint" $proof.Content '"secrets_exposed"\s*:\s*false'
+  if ($proof.Content -match [regex]::Escape($LocalAuthToken)) {
+    throw "TraceGuard proof endpoint leaked the local verification token."
+  }
+
   $html = Invoke-WebRequest -UseBasicParsing -Uri "$baseUrl/" -TimeoutSec 10
   Assert-Content "TraceGuard HTML" $html.Content "proofScoreboard"
   Assert-Content "TraceGuard HTML" $html.Content "Judge proof scoreboard"
+  Assert-Content "TraceGuard HTML" $html.Content "Demo path"
+  Assert-Content "TraceGuard HTML" $html.Content "Phoenix status receipt"
 
   $appJs = Invoke-WebRequest -UseBasicParsing -Uri "$baseUrl/app.js" -TimeoutSec 10
   Assert-Content "TraceGuard app.js" $appJs.Content "renderProofScoreboard"

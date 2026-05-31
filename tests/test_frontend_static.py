@@ -35,6 +35,8 @@ class FrontendStaticTests(unittest.TestCase):
         self.assertIn("30 second story", html)
         self.assertIn("Cloud security lead", html)
         self.assertIn("Demo path", html)
+        self.assertIn("Phoenix status receipt", html)
+        self.assertIn("Grounding receipt", html)
         self.assertIn("proofScoreboard", parser.ids)
         self.assertIn("arizeLoop", parser.ids)
         self.assertIn("Phoenix trace/eval -> better run", html)
