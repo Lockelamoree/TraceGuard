@@ -9,20 +9,25 @@ This is the sanitized proof bundle from the deployed Cloud Run build. It is mean
 - Cloud Run service: `traceguard`
 - Region: `us-central1`
 - Public URL: `https://traceguard-cnhtsa5yrq-uc.a.run.app`
-- Latest ready revision: `traceguard-00017-bqc`
-- Traffic: `100%` to `traceguard-00017-bqc`
+- Latest ready revision: `traceguard-00019-28g`
+- Traffic: `100%` to `traceguard-00019-28g`
 
 ## Public Liveness
 
 ```json
 {
   "health_status": 200,
+  "root_head_status": 200,
+  "proof_status": 200,
+  "proof_head_status": 200,
+  "proof_project": "TraceGuard",
+  "proof_secrets_exposed": false,
   "auth_enabled": true,
   "authenticated": false
 }
 ```
 
-The hosted app is reachable, but protected demo routes stay locked until the Devpost judge key is accepted. That keeps the public URL testable without leaving the sample evidence and runtime details open to the internet.
+The hosted app is reachable, and `/proof` exposes only non-secret judge receipts. Protected demo routes stay locked until the Devpost judge key is accepted. That keeps the public URL testable without leaving the sample evidence and runtime details open to the internet.
 
 ## Authenticated Sample Run
 

@@ -61,8 +61,10 @@ Result: `35` tests passed. In my local Codex shell, `python` and `py -3.11` were
 
 Latest hosted verification I ran on May 31, 2026:
 
-- Cloud Run revision `traceguard-00017-bqc` served `100%` of traffic.
+- Cloud Run revision `traceguard-00019-28g` served `100%` of traffic.
 - `/health` returned `200`.
+- `HEAD /` and `HEAD /proof` returned `200`.
+- `/proof` returned a public non-secret receipt with `project=TraceGuard`, auth enabled, and `secrets_exposed=false`.
 - `/api/auth/status` returned auth enabled and unauthenticated before login.
 - Authenticated sample run returned `10` evidence items, `11` findings, `8` critical/high findings, `0.94` eval average, Gemini validation `pass`, Phoenix tracing ready, Phoenix MCP `ok`, `27` MCP tools, and one read-only query path.
 
