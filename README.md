@@ -12,9 +12,13 @@ Public project URL: https://traceguard-cnhtsa5yrq-uc.a.run.app
 
 Public repository URL: https://github.com/Lockelamoree/TraceGuard
 
+Public proof endpoint: https://traceguard-cnhtsa5yrq-uc.a.run.app/proof
+
 ## Judge Proof in 60 Seconds
 
-If I only had one minute with a judge, I would show this path:
+If I only had one minute with a judge, I would start with the user: a cloud security lead gets scattered GCP evidence after an incident and needs a report they can trust. TraceGuard turns that pile into confirmed findings, eval scores, and a report where every confirmed claim cites source evidence.
+
+Then I would show this path:
 
 1. Open the hosted app and unlock it with the Devpost judge key.
 2. Click `Load sample`, then `Run agent`.
@@ -40,6 +44,8 @@ Hosted proof crops from the deployed Cloud Run build:
 ![TraceGuard hosted Arize improvement loop](docs/screenshots/traceguard-hosted-arize-loop.png)
 
 ![TraceGuard hosted report evidence](docs/screenshots/traceguard-hosted-report-evidence.png)
+
+Sanitized live deployment proof is captured in [docs/hosted-live-proof.md](docs/hosted-live-proof.md). The hosted app also exposes a public, non-secret `/proof` JSON receipt for automated checks. The demo video shotlist is in [docs/demo-video-shotlist.md](docs/demo-video-shotlist.md).
 
 Run locally:
 
@@ -99,12 +105,13 @@ I keep the full map in [PROJECT_VISUALIZATION.md](PROJECT_VISUALIZATION.md), inc
 | Gemini synthesis | Disabled by default | Requires `GOOGLE_CLOUD_PROJECT` and `ENABLE_GEMINI_SYNTHESIS=true` | Gemini summarizes deterministic findings; it does not create security facts. |
 | Phoenix OTEL tracing | Local replay by default | Requires `PHOENIX_API_KEY` or `PHOENIX_COLLECTOR_ENDPOINT` | Runtime badges distinguish live tracing from replay. |
 | Phoenix MCP integration | Local replay by default | Requires live tracing and `PHOENIX_MCP_COMMAND` | The live MCP path verifies `initialize` and `tools/list`, then attempts read-only `list-projects` and `list-traces` queries. |
+| ADK / Agent Platform surface | Importable when `google-adk` is installed | Same core triage logic exposed through `traceguard/adk_agent.py` | Cloud Run is the judge UI; `root_agent` is the Agent Builder / ADK surface. |
 | Public repo and license | This repository | This repository | MIT license included. |
 
 ## Why I Built It This Way
 
 - **Beyond chat:** The app parses evidence, runs security checks, scores findings, runs evals, and renders a report a human can use.
-- **Google Cloud path:** The web app is Cloud Run-ready. The code also exposes an ADK-compatible `root_agent` for Agent Platform work.
+- **Google Cloud path:** The judge-facing app is deployed on Cloud Run, and the repo exposes an ADK-compatible `root_agent` for Agent Builder / Agent Platform workflows over the same parser/scoring/eval core.
 - **Arize path:** I added Phoenix/OpenTelemetry hooks, runtime badges, a pinned Phoenix MCP stdio client, and evals that check whether the report is grounded.
 - **Security workflow:** The point is not to replace a security engineer. It is to stop the report from mixing confirmed evidence with confident guesses.
 - **Honest demo boundary:** Local mode is deterministic and says when Gemini or Phoenix are not live. Nobody needs another dashboard-shaped illusion at 3am.
@@ -229,7 +236,7 @@ The spans include run mode, evidence count/kinds, finding IDs/severities, eval s
 
 The live MCP path lives in `traceguard/phoenix_mcp.py`. When OTEL tracing is live and `PHOENIX_MCP_COMMAND` is configured, TraceGuard launches the Phoenix MCP server over stdio, sends a JSON-RPC `initialize`, performs `tools/list`, then attempts read-only Phoenix data queries through `list-projects` and `list-traces` when those tools are exposed. The API and UI report the MCP result as `ok`, `discovery_only`, `command_not_configured`, `tracing_not_ready`, `error`, or `local_replay`. The public runtime endpoint exposes only whether a command is configured, not the command value.
 
-In the UI, the Arize improvement loop is shown as `Observe -> Evaluate -> Improve`: Phoenix OTEL/MCP status proves the observability path, evals show grounding quality, and the baseline/improved delta shows what changed in the agent run.
+In the UI, the Arize improvement loop is shown as `Observe -> Evaluate -> Improve`: Phoenix OTEL/MCP status proves the observability path, evals show grounding quality, and the baseline/improved delta shows what changed in the agent run. The current build is intentionally honest about the boundary: it demonstrates an eval-guided improved checklist with Phoenix trace/MCP proof surfaced beside it; the next production step is dynamic replanning from historical Phoenix trace and eval reads.
 
 For the hosted Cloud Run demo, the Docker image preinstalls the pinned MCP package. Use:
 

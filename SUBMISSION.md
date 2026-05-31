@@ -2,7 +2,7 @@
 
 ## Project Summary
 
-I built TraceGuard for cloud security triage when the evidence is scattered across logs, IAM JSON, Terraform, alert text, and repository settings. The agent reads that bundle, finds the security-relevant facts, and produces a report with evidence IDs, confidence, impact, remediation, detection ideas, CWE references, and MITRE ATT&CK mappings.
+I built TraceGuard for the moment after a cloud incident when a security lead has logs, IAM JSON, Terraform, alert text, and repository settings scattered across five places and still needs a report they can trust. The agent reads that bundle, finds the security-relevant facts, and produces a report with evidence IDs, confidence, impact, remediation, detection ideas, CWE references, and MITRE ATT&CK mappings.
 
 My main constraint was evidence discipline: if TraceGuard cannot back a claim with parsed evidence, it should not dress it up as confirmed. Security teams already have enough confident nonsense to clean up.
 
@@ -11,6 +11,12 @@ TraceGuard is my Arize track submission. The hosted path uses Cloud Run, Gemini 
 Live project URL: https://traceguard-cnhtsa5yrq-uc.a.run.app
 
 Public repository URL: https://github.com/Lockelamoree/TraceGuard
+
+Public proof endpoint: https://traceguard-cnhtsa5yrq-uc.a.run.app/proof
+
+Hosted live proof: `docs/hosted-live-proof.md`
+
+Demo video shotlist: `docs/demo-video-shotlist.md`
 
 Judge access: if the hosted app asks for an access key, use the temporary judge key provided in the Devpost submission field. The local demo needs no cloud credentials and still shows deterministic triage, baseline/improved comparison, evals, and report export.
 
@@ -81,8 +87,9 @@ More detail lives in `PROJECT_VISUALIZATION.md`.
 - Shows the Arize loop as `Observe -> Evaluate -> Improve`, tying Phoenix trace/MCP proof to eval quality and the improved run delta.
 - Renders the final report in-app and keeps a clipboard export for handoff.
 
-## Technologies Used
+## Hackathon Compliance Proof
 
+- Required runtime: hosted web app on Cloud Run, with an ADK-compatible `root_agent` in `traceguard/adk_agent.py` for Google Agent Builder / Agent Platform orchestration.
 - Google Cloud deployment target: Cloud Run.
 - Google Cloud AI target: Gemini on Vertex AI through the Google Gen AI SDK version line required by Google ADK.
 - Agent surface: ADK-compatible `root_agent` in `traceguard/adk_agent.py`.
@@ -96,7 +103,7 @@ I treated observability as part of the agent loop, not a screenshot at the end. 
 
 In production mode, Phoenix/OpenTelemetry receives run metadata such as evidence mix, finding IDs/severities, eval scores, Gemini status, MCP status/tool count, read-only MCP query names, and report length. When `PHOENIX_MCP_COMMAND` is configured and OTEL is live, TraceGuard starts the Phoenix MCP server over stdio, initializes a JSON-RPC session, performs `tools/list`, then attempts read-only `list-projects` and `list-traces` queries. In local no-credential mode, the app labels the Phoenix step as replay/demo output instead of pretending live trace queries happened.
 
-The improved run shows how eval feedback changes the checklist: public access is promoted from high to critical confidence, and disabled repository controls become explicit findings instead of staying buried in raw evidence.
+The improved run shows how eval feedback changes the checklist: public access is promoted from high to critical confidence, and disabled repository controls become explicit findings instead of staying buried in raw evidence. This is the honest boundary for the current build: Phoenix tracing/MCP and evals make the run observable and judge-verifiable, while the improved checklist is eval-guided rather than autonomous online learning from historical traces.
 
 The hosted UI now makes that loop visible in one place: Phoenix OTEL/MCP status proves the observability path, the eval tile shows grounding quality, and the improvement tile shows the baseline-to-improved finding gain. The repo also includes cropped hosted proof screenshots in `docs/screenshots/` so judges can verify the live integration without relying on one oversized capture.
 
@@ -124,9 +131,11 @@ The production image preinstalls `@arizeai/phoenix-mcp@4.0.13`; local experiment
 
 ## Demo Video Script
 
+The final Devpost video should follow the shotlist in `docs/demo-video-shotlist.md` and stay under three minutes.
+
 ### 0:00-0:20 Problem
 
-Cloud incidents usually arrive as a pile of logs, Terraform snippets, IAM JSON, and alert text. The report is only useful if it separates confirmed facts from guesses.
+After a cloud incident, the security lead gets audit logs, IAM JSON, Terraform, alerts, and repo metadata. TraceGuard turns that pile into a report where a confirmed claim is not allowed unless the source evidence backs it up.
 
 ### 0:20-1:30 Live Agent Run
 
@@ -134,7 +143,7 @@ Load the sample bundle. Run the baseline agent. Show findings for public Cloud R
 
 ### 1:30-2:20 Arize / Phoenix Loop
 
-Run the improved agent. Show the baseline-to-improved delta panel, Phoenix/OpenTelemetry status, Phoenix MCP status, and evals. Explain that eval feedback flagged under-ranked public access and missing repo security controls, so the improved run adds disabled branch protection and secret scanning findings. If the hosted runtime shows MCP `ok`, call out the discovered Phoenix tools and the read-only `list-projects` / `list-traces` query result; if not, call out the exact skipped/error reason shown in the UI.
+Run the improved agent. Show the baseline-to-improved delta panel, Phoenix/OpenTelemetry status, Phoenix MCP status, and evals. Explain that this is an eval-guided improvement replay: Phoenix/OTEL and MCP expose run state, code evals measure grounding, severity, and report quality, and the improved run demonstrates the specific checklist changes that would be promoted into the agent logic. It is not claiming autonomous production self-modification. If the hosted runtime shows MCP `ok`, call out the discovered Phoenix tools and the read-only `list-projects` / `list-traces` query result; if not, call out the exact skipped/error reason shown in the UI.
 
 ### Agent Builder / ADK proof point
 

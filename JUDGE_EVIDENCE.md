@@ -6,6 +6,9 @@ This is the checklist I use to prove what TraceGuard is actually doing. The goal
 
 - Hosted app: https://traceguard-cnhtsa5yrq-uc.a.run.app
 - Public repository: https://github.com/Lockelamoree/TraceGuard
+- Public proof endpoint: https://traceguard-cnhtsa5yrq-uc.a.run.app/proof
+- Sanitized hosted live proof: [docs/hosted-live-proof.md](docs/hosted-live-proof.md)
+- Demo video shotlist: [docs/demo-video-shotlist.md](docs/demo-video-shotlist.md)
 
 ## Local Verification
 
@@ -56,6 +59,24 @@ python -m unittest discover -s tests -p "test_*.py"
 
 Result: `34` tests passed. In my local Codex shell, `python` and `py -3.11` were not on PATH, so I ran the same command with the bundled Python runtime. That does not change the app requirement; a normal Python 3.11+ install can run the suite.
 
+Latest hosted verification I ran on May 31, 2026:
+
+- Cloud Run revision `traceguard-00017-bqc` served `100%` of traffic.
+- `/health` returned `200`.
+- `/api/auth/status` returned auth enabled and unauthenticated before login.
+- Authenticated sample run returned `10` evidence items, `11` findings, `8` critical/high findings, `0.94` eval average, Gemini validation `pass`, Phoenix tracing ready, Phoenix MCP `ok`, `27` MCP tools, and one read-only query path.
+
+The sanitized proof is in [docs/hosted-live-proof.md](docs/hosted-live-proof.md).
+
+## Rubric Mapping
+
+| Rubric area | TraceGuard evidence |
+| --- | --- |
+| Technological implementation | Cloud Run app, Gemini on Vertex AI, ADK `root_agent`, Phoenix OTEL, Phoenix MCP, code evals, auth-gated hosted demo. |
+| Design | Judge proof scoreboard, runtime badges, Arize loop panel, final report preview with evidence IDs. |
+| Potential impact | Shortens cloud security triage while preserving confirmed/hypothesis boundaries for human reviewers. |
+| Quality of idea | Evidence-gated incident-report agent with observability-backed eval loop instead of unsupported AI summaries. |
+
 ## Hosted Verification
 
 Use the private Devpost judge key if the hosted app prompts for access.
@@ -78,4 +99,4 @@ TraceGuard does not claim exploitation, compromise, Gemini synthesis, Phoenix tr
 
 Local mode is deterministic. It labels Phoenix output as replay guidance instead of implying live MCP trace queries.
 
-The current build demonstrates an eval-guided baseline/improved replay loop. When Phoenix MCP is live, it also attempts read-only project/trace queries. The next production step is to use those Phoenix MCP trace/eval reads to generate improvement plans dynamically.
+The current build demonstrates an eval-guided baseline/improved replay loop. When Phoenix MCP is live, it also attempts read-only project/trace queries and exposes the receipt in the UI. The next production step is to use those Phoenix MCP trace/eval reads to generate improvement plans dynamically.

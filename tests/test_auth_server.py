@@ -44,9 +44,11 @@ class TraceGuardAuthServerTests(unittest.TestCase):
 
     def test_protected_routes_require_signed_session(self) -> None:
         self.assertEqual(self.request("/")[0], 200)
+        self.assertEqual(self.request("/", method="HEAD")[0], 200)
         self.assertEqual(self.request("/health")[0], 200)
         self.assertEqual(self.request("/healthz")[0], 200)
         self.assertEqual(self.request("/api/auth/status")[0], 200)
+        self.assertEqual(self.request("/proof")[0], 200)
         self.assertEqual(self.request("/api/runtime")[0], 401)
         self.assertEqual(self.request("/sample")[0], 401)
         self.assertEqual(self.request("/api/analyze", method="POST", body={"evidence_text": "{}"})[0], 401)
@@ -66,6 +68,20 @@ class TraceGuardAuthServerTests(unittest.TestCase):
         session_cookie = cookie.split(";", 1)[0]
         self.assertEqual(self.request("/api/runtime", headers={"Cookie": session_cookie})[0], 200)
         self.assertEqual(self.request("/api/runtime", headers={"Cookie": session_cookie + "x"})[0], 401)
+
+    def test_public_proof_endpoint_exposes_only_safe_receipts(self) -> None:
+        status, _, body = self.request("/proof")
+        self.assertEqual(status, 200)
+        payload = json.loads(body)
+        self.assertEqual(payload["project"], "TraceGuard")
+        self.assertEqual(payload["security_boundary"]["auth_enabled"], True)
+        self.assertEqual(payload["security_boundary"]["secrets_exposed"], False)
+        self.assertIn("traceguard/adk_agent.py", payload["google_cloud"]["adk_root_agent"])
+        self.assertIn("Phoenix", payload["claim_boundary"])
+        lowered = body.lower()
+        self.assertNotIn("local-test-token", lowered)
+        self.assertNotIn("phoenix_api_key", lowered)
+        self.assertEqual(self.request("/proof", method="HEAD")[0], 200)
 
     def test_failed_login_attempts_are_throttled(self) -> None:
         for _ in range(server_module.LOGIN_FAILURE_LIMIT - 1):

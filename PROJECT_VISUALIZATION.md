@@ -63,4 +63,4 @@ flowchart LR
 
 ## Current Boundary
 
-The current build demonstrates an eval-guided baseline/improved loop and read-only Phoenix MCP trace/project querying when Phoenix is live. The next deeper Arize step is to use those trace/eval results to generate an improvement plan dynamically.
+The current build demonstrates an eval-guided baseline/improved loop and read-only Phoenix MCP trace/project querying when Phoenix is live. It uses observability and eval outputs to make the improvement path visible, but it does not claim autonomous production self-modification. The next Arize step is to use Phoenix MCP trace/eval reads to generate improvement plans dynamically.

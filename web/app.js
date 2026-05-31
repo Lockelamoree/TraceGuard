@@ -311,9 +311,20 @@ function renderRuntimeFromResult(result) {
   const mcpQueries = Array.isArray(result.arize?.mcp?.queried_tool_names) && result.arize.mcp.queried_tool_names.length
     ? `Read-only MCP queries: ${escapeHtml(result.arize.mcp.queried_tool_names.join(", "))}.`
     : "No read-only Phoenix trace/project query completed in this run.";
+  const metrics = result.metrics || {};
+  const runReceipt = `Run ${escapeHtml(result.run_id || "unavailable")} completed in ${escapeHtml(metrics.duration_ms || "n/a")} ms.`;
+  const phoenixProject = result.arize?.phoenix_project
+    ? `Phoenix project: ${escapeHtml(result.arize.phoenix_project)}.`
+    : "Phoenix project not returned.";
+  const geminiModel = result.gemini?.model
+    ? `Gemini model: ${escapeHtml(result.gemini.model)}.`
+    : "Gemini model not returned.";
 
   runtimeDetail.innerHTML = `
     <strong>Runtime</strong>
+    <div class="detail">${runReceipt}</div>
+    <div class="detail">${phoenixProject}</div>
+    <div class="detail">${geminiModel}</div>
     <div class="detail">${geminiDetail}</div>
     <div class="detail">${phoenixDetail}</div>
     <div class="detail">${mcpDetail}</div>
@@ -330,10 +341,10 @@ function renderReportPreview(report, mode = "") {
 function renderProofScoreboard(result) {
   if (!result) {
     proofScoreboard.innerHTML = `
-      ${renderScoreCard("Runtime", "Pending", "Run the agent")}
-      ${renderScoreCard("Grounding", "Pending", "Evidence IDs required")}
-      ${renderScoreCard("Eval avg", "Pending", "Quality checks")}
-      ${renderScoreCard("MCP", "Pending", "Live status after run")}
+      ${renderScoreCard("Run receipt", "Pending", "Run the agent")}
+      ${renderScoreCard("Cited claims", "Pending", "Evidence IDs required")}
+      ${renderScoreCard("Eval receipt", "Pending", "Quality checks")}
+      ${renderScoreCard("Phoenix MCP", "Pending", "Live status after run")}
     `;
     return;
   }
@@ -351,11 +362,11 @@ function renderProofScoreboard(result) {
   const geminiValidation = metrics.gemini_validation_status || result.gemini?.validation_status || "not_run";
 
   proofScoreboard.innerHTML = `
-    ${renderScoreCard("Runtime", duration ? `${duration} ms` : "Measured", "End-to-end agent run")}
-    ${renderScoreCard("Grounding", `${unsupported} unsupported`, "Confirmed claims")}
-    ${renderScoreCard("Eval avg", `${Math.round(evalAverage * 100)}%`, "Report quality")}
+    ${renderScoreCard("Run receipt", duration ? `${duration} ms` : "Measured", "End-to-end agent run")}
+    ${renderScoreCard("Cited claims", `${unsupported} unsupported`, "Confirmed claims")}
+    ${renderScoreCard("Eval receipt", `${Math.round(evalAverage * 100)}%`, "Report quality")}
     ${renderScoreCard("Gemini", geminiValidation, "Evidence-ID validator")}
-    ${renderScoreCard("MCP", mcpLabel, "Phoenix read-only path")}
+    ${renderScoreCard("Phoenix MCP", mcpLabel, "Read-only path")}
     ${renderScoreCard("Critical/high", Number(metrics.critical_high_count ?? countCriticalHigh(result.findings)), "Priority findings")}
   `;
 }
@@ -363,6 +374,11 @@ function renderProofScoreboard(result) {
 function renderArizeLoop(result) {
   if (!result) {
     arizeLoop.innerHTML = `
+      <article class="loop-card loop-receipt pending">
+        <span>Improvement receipt</span>
+        <strong>Phoenix trace/eval -> checklist change -> better run</strong>
+        <em>Run the agent to populate the live proof chain.</em>
+      </article>
       <article class="loop-card pending">
         <span>01 Observe</span>
         <strong>Phoenix pending</strong>
@@ -394,12 +410,26 @@ function renderArizeLoop(result) {
     ? improved.findings.filter((finding) => !findingMap(baseline.findings).has(findingKey(finding)))
     : [];
   const findingGain = baseline && improved ? improved.findings.length - baseline.findings.length : 0;
+  const queriedCount = queried.length || Number(mcp.queried_tool_count || 0);
+  const mcpProof = mcp.status === "ok"
+    ? `${Number(mcp.tool_count || 0)} tools, ${queriedCount} read query`
+    : mcp.status === "discovery_only"
+      ? `${Number(mcp.tool_count || 0)} tools discovered`
+      : mcp.status || "MCP not run";
+  const improvementReceipt = baseline && improved
+    ? `${otelLive ? "Phoenix OTEL live" : "Trace context shown"}; eval avg ${Math.round(evalAverage * 100)}%; ${formatSigned(findingGain)} findings in improved run.`
+    : "Baseline and improved runs appear here as one proof chain.";
 
   arizeLoop.innerHTML = `
+    <article class="loop-card loop-receipt ${baseline && improved ? "good" : "warn"}">
+      <span>Improvement receipt</span>
+      <strong>Phoenix trace/eval -> checklist change -> better run</strong>
+      <em>${escapeHtml(improvementReceipt)}</em>
+    </article>
     <article class="loop-card ${otelLive ? "good" : "warn"}">
       <span>01 Observe</span>
       <strong>${otelLive ? "Phoenix OTEL live" : result.arize?.phoenix_enabled ? "Phoenix configured" : "Local replay"}</strong>
-      <em>${escapeHtml(mcp.status === "ok" ? `${Number(mcp.tool_count || 0)} MCP tools, ${queried.length} read query` : mcp.status || "MCP not run")}</em>
+      <em>${escapeHtml(mcpProof)}</em>
     </article>
     <article class="loop-card ${unsupported === 0 ? "good" : "warn"}">
       <span>02 Evaluate</span>
@@ -417,7 +447,8 @@ function renderArizeLoop(result) {
 function improvementSummary(improvedOnly) {
   if (improvedOnly.length) {
     const findingIds = [...new Set(improvedOnly.map((finding) => finding.id))];
-    return `Improved-only coverage: ${findingIds.join(", ")}.`;
+    const evidenceIds = [...new Set(improvedOnly.flatMap((finding) => finding.evidence_ids || []))];
+    return `Improved coverage: ${findingIds.join(", ")} with evidence ${evidenceIds.join(", ")}.`;
   }
   return "Improved run preserves evidence-grounded coverage.";
 }

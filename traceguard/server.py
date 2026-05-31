@@ -30,6 +30,7 @@ PUBLIC_GET_PATHS = {
     "/favicon.ico",
     "/health",
     "/healthz",
+    "/proof",
     "/api/auth/status",
 }
 PUBLIC_POST_PATHS = {"/api/auth/login", "/api/auth/logout"}
@@ -44,30 +45,39 @@ class TraceGuardHandler(BaseHTTPRequestHandler):
     server_version = "TraceGuard/0.1"
 
     def do_GET(self) -> None:
+        self._handle_get(send_body=True)
+
+    def do_HEAD(self) -> None:
+        self._handle_get(send_body=False)
+
+    def _handle_get(self, *, send_body: bool) -> None:
         path = unquote(self.path.split("?", 1)[0])
         if path in {"/health", "/healthz"}:
-            self._send(200, b"ok", "text/plain")
+            self._send(200, b"ok", "text/plain", send_body=send_body)
             return
         if path == "/api/auth/status":
-            self._send_auth_status()
+            self._send_auth_status(send_body=send_body)
+            return
+        if path == "/proof":
+            self._send_json(200, self._proof_payload(), send_body=send_body)
             return
         if self._requires_auth(path, "GET") and not self._authenticated():
-            self._send_json(401, {"error": "authentication required", "authenticated": False})
+            self._send_json(401, {"error": "authentication required", "authenticated": False}, send_body=send_body)
             return
         if path == "/api/runtime":
-            self._send_json(200, RuntimeConfig.from_env().public_status())
+            self._send_json(200, RuntimeConfig.from_env().public_status(), send_body=send_body)
             return
         if path == "/sample":
-            self._send_file(ROOT / "samples" / "gcp_incident_bundle.txt")
+            self._send_file(ROOT / "samples" / "gcp_incident_bundle.txt", send_body=send_body)
             return
         if path == "/":
-            self._send_file(WEB_ROOT / "index.html")
+            self._send_file(WEB_ROOT / "index.html", send_body=send_body)
             return
         candidate = (WEB_ROOT / path.lstrip("/")).resolve()
         if WEB_ROOT.resolve() not in candidate.parents and candidate != WEB_ROOT.resolve():
-            self._send(403, b"forbidden", "text/plain")
+            self._send(403, b"forbidden", "text/plain", send_body=send_body)
             return
-        self._send_file(candidate)
+        self._send_file(candidate, send_body=send_body)
 
     def do_POST(self) -> None:
         path = unquote(self.path.split("?", 1)[0])
@@ -96,12 +106,12 @@ class TraceGuardHandler(BaseHTTPRequestHandler):
     def log_message(self, fmt: str, *args: object) -> None:
         print(f"[traceguard] {self.address_string()} {fmt % args}")
 
-    def _send_file(self, path: Path) -> None:
+    def _send_file(self, path: Path, *, send_body: bool = True) -> None:
         if not path.is_file():
-            self._send(404, b"not found", "text/plain")
+            self._send(404, b"not found", "text/plain", send_body=send_body)
             return
         content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
-        self._send(200, path.read_bytes(), content_type)
+        self._send(200, path.read_bytes(), content_type, send_body=send_body)
 
     def _handle_login(self) -> None:
         config = auth_config_from_env()
@@ -155,12 +165,44 @@ class TraceGuardHandler(BaseHTTPRequestHandler):
             headers={"Set-Cookie": build_logout_cookie(secure=self._secure_request())},
         )
 
-    def _send_auth_status(self) -> None:
+    def _send_auth_status(self, *, send_body: bool = True) -> None:
         config = auth_config_from_env()
         self._send_json(
             200,
             {"enabled": config.enabled, "authenticated": self._authenticated(config)},
+            send_body=send_body,
         )
+
+    def _proof_payload(self) -> dict[str, object]:
+        runtime = RuntimeConfig.from_env()
+        auth = auth_config_from_env()
+        return {
+            "project": "TraceGuard",
+            "repo": "https://github.com/Lockelamoree/TraceGuard",
+            "hosted_app": "https://traceguard-cnhtsa5yrq-uc.a.run.app",
+            "demo_path": ["Load sample", "Run agent", "Check Phoenix/eval receipts", "Copy cited report"],
+            "google_cloud": {
+                "cloud_run_runtime": True,
+                "gemini_vertex_configured": runtime.enable_gemini_synthesis and runtime.google_genai_use_vertexai,
+                "gemini_model": runtime.gemini_model,
+                "adk_root_agent": "traceguard/adk_agent.py",
+            },
+            "arize": {
+                "phoenix_project": runtime.phoenix_project_name,
+                "phoenix_configured": runtime.phoenix_api_key_configured or bool(runtime.phoenix_collector_endpoint),
+                "phoenix_mcp_configured": bool(runtime.phoenix_mcp_command),
+                "phoenix_mcp_server": runtime.phoenix_mcp_server,
+            },
+            "security_boundary": {
+                "auth_enabled": auth.enabled,
+                "protected_routes": ["/sample", "/api/runtime", "/api/analyze"],
+                "secrets_exposed": False,
+            },
+            "claim_boundary": (
+                "TraceGuard reports live Gemini, Phoenix, and MCP only when the runtime result confirms those states. "
+                "The current improvement loop is eval-guided and does not claim autonomous production self-modification."
+            ),
+        }
 
     def _read_json_body(self, *, max_bytes: int) -> dict[str, object]:
         length = min(int(self.headers.get("content-length", "0")), max_bytes)
@@ -205,10 +247,25 @@ class TraceGuardHandler(BaseHTTPRequestHandler):
     def _client_key(self) -> str:
         return self.client_address[0]
 
-    def _send_json(self, status: int, payload: dict, headers: dict[str, str] | None = None) -> None:
-        self._send(status, json.dumps(payload).encode("utf-8"), "application/json", headers=headers)
+    def _send_json(
+        self,
+        status: int,
+        payload: dict,
+        headers: dict[str, str] | None = None,
+        *,
+        send_body: bool = True,
+    ) -> None:
+        self._send(status, json.dumps(payload).encode("utf-8"), "application/json", headers=headers, send_body=send_body)
 
-    def _send(self, status: int, body: bytes, content_type: str, headers: dict[str, str] | None = None) -> None:
+    def _send(
+        self,
+        status: int,
+        body: bytes,
+        content_type: str,
+        headers: dict[str, str] | None = None,
+        *,
+        send_body: bool = True,
+    ) -> None:
         self.send_response(status)
         self.send_header("content-type", content_type)
         self.send_header("content-length", str(len(body)))
@@ -226,7 +283,8 @@ class TraceGuardHandler(BaseHTTPRequestHandler):
         for key, value in (headers or {}).items():
             self.send_header(key, value)
         self.end_headers()
-        self.wfile.write(body)
+        if send_body:
+            self.wfile.write(body)
 
 
 def _record_login_result(client_key: str, *, success: bool, now: float | None = None) -> int:

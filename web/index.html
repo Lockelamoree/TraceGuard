@@ -27,7 +27,7 @@
               <h1>TraceGuard</h1>
               <span class="track-badge">Security triage agent</span>
             </div>
-            <p class="subtitle">Cloud security triage that keeps every confirmed claim tied to evidence.</p>
+            <p class="subtitle">For a cloud security lead staring at logs, IAM JSON, Terraform, alerts, and repo metadata: a report is only confirmed when the evidence IDs back it up.</p>
           </div>
           <div class="topbar-actions">
             <div class="status-pill" id="runtimeStatus" role="status" aria-live="polite">Checking runtime...</div>
@@ -35,24 +35,37 @@
           </div>
         </header>
 
+        <section class="judge-brief" aria-label="30 second judge story">
+          <div class="brief-copy">
+            <span>30 second story</span>
+            <strong>TraceGuard turns scattered GCP incident evidence into a human-checkable security report, then shows the Phoenix/eval receipt for what improved.</strong>
+          </div>
+          <div class="brief-receipts" aria-label="Live proof receipts">
+            <span class="receipt-chip">Hosted Cloud Run</span>
+            <span class="receipt-chip">Gemini evidence validation</span>
+            <span class="receipt-chip">Phoenix OTEL + MCP</span>
+            <span class="receipt-chip">0 unsupported confirmed claims</span>
+          </div>
+        </section>
+
         <section class="proof-strip" aria-label="Submission proof">
           <article class="proof-tile">
-            <span>Agent mission</span>
-            <strong>Evidence-backed triage</strong>
+            <span>Persona</span>
+            <strong>Cloud security lead</strong>
             <em>Confirmed findings cite source IDs</em>
           </article>
           <article class="proof-tile">
-            <span>Google runtime</span>
-            <strong>Cloud Run + Gemini status</strong>
-            <em>ADK root_agent in repo</em>
+            <span>Evidence</span>
+            <strong>Every finding cites IDs</strong>
+            <em>No evidence, no confirmed claim</em>
           </article>
           <article class="proof-tile">
-            <span>Arize loop</span>
-            <strong>Trace -> eval -> improve</strong>
-            <em>Phoenix status and delta shown together</em>
+            <span>Phoenix</span>
+            <strong>Phoenix trace/eval -> better run</strong>
+            <em>Live status, quality score, and delta shown together</em>
           </article>
           <article class="proof-tile">
-            <span>Human control</span>
+            <span>Improvement</span>
             <strong>Baseline vs improved</strong>
             <em>Delta visible before report export</em>
           </article>
@@ -89,6 +102,14 @@
             <strong>Report</strong>
             <em>operator handoff</em>
           </div>
+        </section>
+
+        <section class="demo-path" aria-label="Demo path">
+          <span>Demo path</span>
+          <strong>1 Load sample</strong>
+          <strong>2 Run agent</strong>
+          <strong>3 Check Phoenix/eval receipts</strong>
+          <strong>4 Copy cited report</strong>
         </section>
 
         <div class="grid">
