@@ -9,7 +9,7 @@ This is the sanitized proof bundle from the deployed Cloud Run build. It is mean
 - Cloud Run service: `traceguard`
 - Region: `us-central1`
 - Public URL: `https://traceguard-cnhtsa5yrq-uc.a.run.app`
-- Latest ready revision: `traceguard-00023-pm7`, verified with Cloud Run service describe after deployment
+- Latest ready revision: exposed in `/proof` as `deployment.cloud_run_revision` and verified with Cloud Run service describe after deployment
 - Traffic: `100%` to the latest ready revision
 
 ## Public Liveness
@@ -33,7 +33,7 @@ The hosted app is reachable, and `/proof` exposes only non-secret judge receipts
 
 ## Authenticated Sample Run
 
-This run used the private TraceGuard access key from Secret Manager. The key was not printed.
+This run used the private TraceGuard access key from Secret Manager. The key was not printed. The live `/proof` endpoint now includes this same shape under `latest_run`, with the current Cloud Run revision and pushed source commit filled in at runtime.
 
 ```json
 {
