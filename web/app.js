@@ -26,6 +26,9 @@ const sampleSelect = document.querySelector("#sampleSelect");
 const customSampleButton = document.querySelector("#customSampleButton");
 const customSampleFile = document.querySelector("#customSampleFile");
 const customSampleStatus = document.querySelector("#customSampleStatus");
+const judgeEvidenceReceipt = document.querySelector("#judgeEvidenceReceipt");
+const judgeGroundingReceipt = document.querySelector("#judgeGroundingReceipt");
+const judgePhoenixReceipt = document.querySelector("#judgePhoenixReceipt");
 let lastReport = "";
 const INITIAL_SUMMARY = "Load the sample bundle, then compare baseline and improved triage.";
 const INITIAL_RUNTIME_DETAIL = "Runtime detail appears after a run. Local mode uses deterministic triage without claiming live Gemini or Phoenix telemetry.";
@@ -258,6 +261,7 @@ async function initialize() {
     }
     showApp(status.enabled);
     await loadSampleOptions();
+    await loadProofReceipt();
     await loadRuntimeStatus();
   } catch {
     showApp(false);
@@ -289,6 +293,7 @@ async function login(event) {
   authMessage.textContent = "";
   showApp(result.enabled);
   await loadSampleOptions();
+  await loadProofReceipt();
   await loadRuntimeStatus();
   window.setTimeout(() => evidence.focus(), 0);
 }
@@ -378,6 +383,56 @@ async function loadRuntimeStatus() {
   }
 }
 
+async function loadProofReceipt() {
+  try {
+    const response = await fetch("/proof", { cache: "no-store" });
+    if (!response.ok) return;
+    const proof = await response.json();
+    updateJudgeReceiptFromProof(proof);
+  } catch {
+    // The detailed proof scoreboard still updates after a run; keep this context neutral if /proof is unavailable.
+  }
+}
+
+function updateJudgeReceiptFromProof(proof) {
+  const latestRun = proof?.latest_run || {};
+  updateJudgeReceipt({
+    unsupported: latestRun.unsupported_confirmed_claims,
+    evalAverage: latestRun.eval_average,
+    phoenixLabel: phoenixReceiptLabel(latestRun.arize_tracing_ready, latestRun.phoenix_mcp_status),
+  });
+}
+
+function updateJudgeReceiptFromResult(result) {
+  updateJudgeReceipt({
+    unsupported: result.metrics?.unsupported_confirmed_claims,
+    evalAverage: result.metrics?.eval_average,
+    phoenixLabel: phoenixReceiptLabel(result.arize?.tracing_ready, result.arize?.mcp?.status),
+  });
+}
+
+function updateJudgeReceipt({ unsupported, evalAverage, phoenixLabel }) {
+  const unsupportedCount = Number(unsupported);
+  if (judgeEvidenceReceipt && Number.isFinite(unsupportedCount)) {
+    judgeEvidenceReceipt.textContent = `${unsupportedCount} unsupported ${unsupportedCount === 1 ? "claim" : "claims"}`;
+  }
+  const average = Number(evalAverage);
+  if (judgeGroundingReceipt && Number.isFinite(average) && average > 0) {
+    judgeGroundingReceipt.textContent = `${Math.round(average * 100)}% eval avg`;
+  }
+  if (judgePhoenixReceipt && phoenixLabel) {
+    judgePhoenixReceipt.textContent = phoenixLabel;
+  }
+}
+
+function phoenixReceiptLabel(otelReady, mcpStatus) {
+  const status = String(mcpStatus || "").trim();
+  if (otelReady && status === "ok") return "MCP + OTEL live";
+  if (otelReady) return "OTEL live";
+  if (status) return `MCP ${status}`;
+  return "";
+}
+
 async function loadSampleOptions() {
   if (!sampleSelect) return;
   try {
@@ -403,6 +458,7 @@ async function loadSampleOptions() {
 function render(result) {
   rememberRun(result);
   lastReport = result.report_markdown || "";
+  updateJudgeReceiptFromResult(result);
   renderRuntimeFromResult(result);
   renderProofScoreboard(result);
   renderArizeLoop(result);
