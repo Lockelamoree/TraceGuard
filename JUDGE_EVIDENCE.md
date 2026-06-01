@@ -26,6 +26,15 @@ Expected deterministic demo path:
 3. Click `Run agent`.
 4. Confirm the final report preview is populated.
 
+Optional custom sample path:
+
+1. Click `Upload sample`.
+2. Select a redacted UTF-8 text, log, JSON, JSONL, NDJSON, Terraform, YAML, or Markdown evidence bundle under 1 MB.
+3. Confirm the upload status reports `Custom sample loaded`.
+4. Run the agent as usual.
+
+The custom upload path is client-side only. It rejects empty files, unexpected extensions or MIME types, invalid UTF-8, binary/control-heavy content, and likely secrets such as private keys, cloud/API tokens, GitHub tokens, AWS access keys, or long credential assignments before anything is copied into the evidence textarea.
+
 Expected local outputs:
 
 - Baseline summary: `9 findings produced, including 8 critical/high priority issues.`
@@ -55,13 +64,13 @@ Hosted proof crops:
 
 ![TraceGuard hosted report evidence](docs/screenshots/traceguard-hosted-gemini3-report-evidence.png)
 
-Latest local verification I ran on May 31, 2026:
+Latest local verification I ran on June 1, 2026:
 
 ```powershell
 python -m unittest discover -s tests -p "test_*.py"
 ```
 
-Result: `38` tests passed. In my local Codex shell, `python` and `py -3.11` were not on PATH, so I ran the same command with the bundled Python runtime. That does not change the app requirement; a normal Python 3.11+ install can run the suite.
+Result: `42` tests passed. In my local Codex shell, `python` and `py -3.11` were not on PATH, so I ran the same command with the bundled Python runtime. That does not change the app requirement; a normal Python 3.11+ install can run the suite.
 
 Latest hosted verification I ran on June 1, 2026:
 
@@ -70,6 +79,8 @@ Latest hosted verification I ran on June 1, 2026:
 - `HEAD /` and `HEAD /proof` returned `200`.
 - `/proof` returned a public non-secret receipt with `project=TraceGuard`, auth disabled for judging, `secrets_exposed=false`, Gemini 3 Flash Preview model configuration, and a sanitized `latest_run` receipt.
 - `/api/auth/status` returned auth disabled and authenticated for public judging.
+- Hosted HTML included the `Upload sample` control and custom file input.
+- Hosted JavaScript included the custom upload handler, maximum-size check, and likely-secret pattern checks.
 - Public sample run returned `10` evidence items, `11` findings, `8` critical/high findings, `0` unsupported confirmed claims, `0.94` eval average, Gemini 3 validation `pass` with `0` rejected evidence references, Phoenix tracing ready, Phoenix MCP `ok`, `27` MCP tools, and one read-only `list-traces` query path.
 
 The sanitized proof is in [docs/hosted-live-proof.md](docs/hosted-live-proof.md).
@@ -93,6 +104,7 @@ Suggested checks:
 - `/health` returns `ok` on the hosted Cloud Run URL.
 - Local/container `/healthz` returns `ok`; Cloud Run's public `run.app` URL reserves some paths ending in `z`, so hosted `/healthz` can return a Google Frontend 404 before it reaches the container.
 - `/api/auth/status` reports auth disabled and authenticated for public judging.
+- `Upload sample` is available for redacted custom evidence bundles and reports validation failures in the evidence panel.
 - Runtime badges clearly identify whether Gemini, Phoenix OTEL, and Phoenix MCP are live or replay/skipped.
 - If Phoenix MCP is live, the runtime detail reports discovered tools and read-only `list-projects` / `list-traces` query status.
 - The Arize loop panel should show `Phoenix OTEL live`, MCP tool discovery/read-query proof, eval average, unsupported confirmed claim count, Gemini validation, and the next-run improvement plan.

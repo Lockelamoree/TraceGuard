@@ -20,7 +20,7 @@ Public proof endpoint: https://traceguard-cnhtsa5yrq-uc.a.run.app/proof
 
 ## Proof Snapshot
 
-The UI makes the evidence boundary visible without asking anyone to trust a black box. Local mode stays deterministic and labels Gemini or Phoenix as disabled/replay unless those integrations are actually configured. The hosted Cloud Run build is public for judging, includes selectable sample bundles, and shows live runtime receipts for Gemini, Phoenix OTEL, Phoenix MCP, eval quality, and unsupported confirmed claims.
+The UI makes the evidence boundary visible without asking anyone to trust a black box. Local mode stays deterministic and labels Gemini or Phoenix as disabled/replay unless those integrations are actually configured. The hosted Cloud Run build is public for judging, includes selectable sample bundles plus a guarded custom sample upload path, and shows live runtime receipts for Gemini, Phoenix OTEL, Phoenix MCP, eval quality, and unsupported confirmed claims.
 
 ![TraceGuard hosted Gemini 3 workbench](docs/screenshots/traceguard-hosted-gemini3-workbench.png)
 
@@ -105,6 +105,8 @@ py -3.11 -m traceguard.server --host 127.0.0.1 --port 8000
 ```
 
 Open `http://127.0.0.1:8000`, choose a sample bundle, and run both `Baseline` and `Run agent`.
+
+You can also click `Upload sample` to load a custom text evidence bundle into the same textarea. The upload is browser-local and non-persistent: TraceGuard validates the file before reading it into the evidence box, and the backend only receives the text if you later run the agent. Accepted sample types are text/log/JSON/JSONL/NDJSON/Terraform/YAML/Markdown files under 1 MB. The UI rejects empty files, invalid UTF-8, binary/control-heavy content, unexpected file extensions or MIME types, and likely secrets such as private keys, Google API keys, AWS access keys, GitHub tokens, or long credential assignments. Redact real secrets before analysis anyway; client-side checks are a guardrail, not a full DLP system.
 
 Expected sample result:
 
@@ -248,7 +250,7 @@ That gives two entry points over the same core agent logic: Cloud Run for the ho
 - `traceguard/evals.py`: Quality evals for grounded reporting.
 - `traceguard/report.py`: Markdown incident report renderer.
 - `traceguard/server.py`: Dependency-free web server.
-- `web/`: Browser UI.
+- `web/`: Browser UI with sample selection, guarded custom sample upload, proof scoreboard, and report preview.
 - `samples/gcp_incident_bundle.txt`: Safe synthetic incident scenario.
 - `samples/gcp_storage_exfil_bundle.txt`: Storage-exfiltration scenario.
 - `samples/gcp_low_signal_control_bundle.txt`: Low-signal control scenario.
@@ -257,6 +259,8 @@ That gives two entry points over the same core agent logic: Cloud Run for the ho
 ## Safety Model
 
 TraceGuard does not claim exploitation or compromise without evidence. Findings are marked confirmed only when backed by parsed evidence IDs. Empty or malformed evidence returns inconclusive results, not a fake clean bill of health.
+
+Custom sample upload is intentionally client-side only. Files are not stored by TraceGuard, no upload endpoint writes them to disk, and the browser must pass the local validation gate before text is copied into the evidence field. The safety gate is designed to keep obvious binary files and likely secrets out of the analysis path, while still allowing realistic redacted cloud logs, IAM JSON, Terraform, alert text, and repo metadata.
 
 The hosted judging app is public so reviewers can run it without an access key. For private deployments, set `TRACEGUARD_REQUIRE_AUTH=true` and configure `TRACEGUARD_AUTH_TOKEN`; then the server denies `/sample`, `/api/runtime`, and `/api/analyze` until the browser presents a signed HttpOnly session cookie. The login screen is convenience; the backend check is the actual control.
 

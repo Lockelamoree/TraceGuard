@@ -16,13 +16,13 @@ Public proof endpoint: https://traceguard-cnhtsa5yrq-uc.a.run.app/proof
 
 Hosted live proof: `docs/hosted-live-proof.md`
 
-Judge access: the hosted app is public for review and no access key is required. The local run still needs no cloud credentials and shows deterministic triage, sample selection, baseline/improved comparison, evals, improvement planning, and report export.
+Judge access: the hosted app is public for review and no access key is required. The local run still needs no cloud credentials and shows deterministic triage, sample selection, guarded custom sample upload, baseline/improved comparison, evals, improvement planning, and report export.
 
 ## Judge Quickstart
 
 1. Open the hosted URL or run locally.
-2. Choose a sample bundle.
-3. Click `Load sample`.
+2. Choose a sample bundle, or click `Upload sample` to use a redacted custom text bundle.
+3. Click `Load sample` for a bundled sample; uploaded samples are copied into the evidence box after local safety checks.
 4. Click `Run agent`.
 5. Confirm the baseline/improved delta:
    - Baseline: 9 findings.
@@ -81,6 +81,7 @@ More detail lives in `PROJECT_VISUALIZATION.md`.
 ## What It Does
 
 - Parses mixed cloud incident evidence into structured artifacts.
+- Loads bundled samples or guarded custom text samples. Custom uploads stay browser-local, must be UTF-8 text under 1 MB, and are blocked when they look binary or contain likely secrets.
 - Checks for IAM over-privilege, public resource exposure, suspicious token/policy activity, broad network ingress, and disabled repo controls.
 - Produces a report where every confirmed finding cites evidence IDs.
 - Shows a baseline run and an improved run so the delta is visible.

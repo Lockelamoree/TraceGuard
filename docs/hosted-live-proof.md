@@ -9,6 +9,8 @@ This is the sanitized proof bundle from the deployed Cloud Run build. It is mean
 - Cloud Run service: `traceguard`
 - Region: `us-central1`
 - Public URL: `https://traceguard-cnhtsa5yrq-uc.a.run.app`
+- Latest verified ready revision: `traceguard-00029-ngc`
+- Latest verified source commit: `1a5ebd4a331d1f50a642b6e45a121a8bbd4ba0f7`
 - Latest ready revision: exposed in `/proof` as `deployment.cloud_run_revision`
 - Source commit: exposed in `/proof` as `deployment.source_commit`
 - Traffic: `100%` to the latest ready revision
@@ -30,7 +32,13 @@ This is the sanitized proof bundle from the deployed Cloud Run build. It is mean
 }
 ```
 
-The hosted app is reachable, and `/proof` exposes only non-secret judge receipts. The judging deployment is public so reviewers can choose a bundled sample and run the agent without an access key. Private deployments can still enable the signed-session gate with `TRACEGUARD_REQUIRE_AUTH=true`.
+The hosted app is reachable, and `/proof` exposes only non-secret judge receipts. The judging deployment is public so reviewers can choose a bundled sample or load a redacted custom text sample and run the agent without an access key. Private deployments can still enable the signed-session gate with `TRACEGUARD_REQUIRE_AUTH=true`.
+
+## Custom Sample Upload Safety
+
+The deployed UI includes an `Upload sample` control for custom evidence bundles. It is intentionally browser-local and non-persistent: TraceGuard does not add a file-storage upload endpoint, and the selected file is copied into the evidence textarea only after local validation passes.
+
+The guard accepts redacted text/log/JSON/JSONL/NDJSON/Terraform/YAML/Markdown samples under 1 MB. It blocks empty files, invalid UTF-8, binary/control-heavy content, unexpected file extensions or MIME types, and likely secrets such as private keys, Google API keys, AWS access keys, GitHub tokens, or long credential assignments. This is a safety check for demo evidence, not a replacement for proper secret scanning or DLP.
 
 ## Hosted Sample Run
 
