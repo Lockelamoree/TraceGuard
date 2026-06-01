@@ -34,17 +34,17 @@ Then I would show this path:
 
 That is the point of the project: the UI should make the evidence boundary visible without asking anyone to trust a black box. Local mode is still useful, but it is not dressed up as live Gemini or live Phoenix. Management may ask for military-grade encryption; TraceGuard asks for receipts.
 
-![TraceGuard local proof scoreboard](docs/screenshots/traceguard-local-proof.png)
+![TraceGuard hosted Gemini 3 workbench](docs/screenshots/traceguard-hosted-gemini3-workbench.png)
 
-Hosted proof crops from the deployed Cloud Run build:
+Hosted Gemini 3 proof crops from the deployed Cloud Run build:
 
-![TraceGuard hosted runtime badges](docs/screenshots/traceguard-hosted-runtime-badges.png)
+![TraceGuard hosted Gemini 3 runtime badges](docs/screenshots/traceguard-hosted-gemini3-runtime-badges.png)
 
-![TraceGuard hosted proof scoreboard](docs/screenshots/traceguard-hosted-proof-scoreboard.png)
+![TraceGuard hosted Gemini 3 proof scoreboard](docs/screenshots/traceguard-hosted-gemini3-proof-scoreboard.png)
 
-![TraceGuard hosted Arize improvement loop](docs/screenshots/traceguard-hosted-arize-loop.png)
+![TraceGuard hosted Gemini 3 Arize improvement loop](docs/screenshots/traceguard-hosted-gemini3-arize-loop.png)
 
-![TraceGuard hosted report evidence](docs/screenshots/traceguard-hosted-report-evidence.png)
+![TraceGuard hosted Gemini 3 report evidence](docs/screenshots/traceguard-hosted-gemini3-report-evidence.png)
 
 Sanitized live deployment proof is captured in [docs/hosted-live-proof.md](docs/hosted-live-proof.md). The hosted app also exposes a public, non-secret `/proof` JSON receipt for automated checks, including a sanitized `latest_run` receipt with Gemini validation, Phoenix MCP status, eval average, and unsupported-claim count. The demo video shotlist is in [docs/demo-video-shotlist.md](docs/demo-video-shotlist.md).
 
