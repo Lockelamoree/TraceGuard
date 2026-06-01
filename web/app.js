@@ -23,17 +23,32 @@ const authMessage = document.querySelector("#authMessage");
 const logoutButton = document.querySelector("#logoutButton");
 const evidenceStats = document.querySelector("#evidenceStats");
 const sampleSelect = document.querySelector("#sampleSelect");
+const customSampleButton = document.querySelector("#customSampleButton");
+const customSampleFile = document.querySelector("#customSampleFile");
+const customSampleStatus = document.querySelector("#customSampleStatus");
 let lastReport = "";
 const INITIAL_SUMMARY = "Load the sample bundle, then compare baseline and improved triage.";
 const INITIAL_RUNTIME_DETAIL = "Runtime detail appears after a run. Local mode uses deterministic triage without claiming live Gemini or Phoenix telemetry.";
 const INITIAL_GEMINI_DETAIL = "Gemini synthesis appears here only when the live Vertex AI call succeeds.";
+const CUSTOM_SAMPLE_MAX_BYTES = 1000000;
+const CUSTOM_SAMPLE_MAX_CHARACTERS = 1000000;
+const CUSTOM_SAMPLE_ALLOWED_EXTENSIONS = new Set([".txt", ".log", ".json", ".jsonl", ".ndjson", ".tf", ".tfvars", ".yaml", ".yml", ".md"]);
+const CUSTOM_SAMPLE_ALLOWED_MIME_TYPES = new Set(["", "application/json", "application/x-ndjson", "application/octet-stream", "application/yaml", "text/markdown", "text/plain", "text/yaml"]);
+const CUSTOM_SAMPLE_SECRET_PATTERNS = [
+  { label: "private key block", pattern: /-----BEGIN [A-Z ]*PRIVATE KEY-----/i },
+  { label: "Google API key", pattern: /AIza[0-9A-Za-z_-]{35}/ },
+  { label: "AWS access key", pattern: /AKIA[0-9A-Z]{16}/ },
+  { label: "GitHub token", pattern: /gh[pousr]_[A-Za-z0-9_]{36,255}/ },
+  { label: "credential assignment", pattern: /(?:api[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret|password|private_key|secret)\s*[:=]\s*["']?(?!redacted|example|changeme|placeholder)[A-Za-z0-9_./+=-]{24,}/i },
+];
 const runState = {
   evidenceText: "",
   baseline: null,
   improved: null,
 };
-const actionButtons = ["#sampleSelect", "#loadSample", "#runBaseline", "#runImproved"]
-  .map((selector) => document.querySelector(selector));
+const actionButtons = ["#sampleSelect", "#loadSample", "#customSampleButton", "#customSampleFile", "#runBaseline", "#runImproved"]
+  .map((selector) => document.querySelector(selector))
+  .filter(Boolean);
 
 renderDelta();
 renderReportPreview("");
@@ -52,6 +67,7 @@ document.querySelector("#loadSample").addEventListener("click", async () => {
     if (!response) return;
     evidence.value = await response.text();
     resetRunState();
+    setCustomSampleStatus("");
     summary.textContent = `${sampleLabel} loaded. Run the improved agent to capture the baseline and improved delta.`;
   } catch {
     summary.textContent = "Sample load failed. Check the local server or hosted session and try again.";
@@ -60,12 +76,137 @@ document.querySelector("#loadSample").addEventListener("click", async () => {
   }
 });
 
+customSampleButton.addEventListener("click", () => customSampleFile.click());
+customSampleFile.addEventListener("change", handleCustomSampleUpload);
 document.querySelector("#runBaseline").addEventListener("click", () => runAgent("baseline"));
 document.querySelector("#runImproved").addEventListener("click", () => runAgent("improved"));
-evidence.addEventListener("input", resetRunState);
+evidence.addEventListener("input", () => {
+  setCustomSampleStatus("");
+  resetRunState();
+});
 copyReportButton.addEventListener("click", copyReport);
 authForm.addEventListener("submit", login);
 logoutButton.addEventListener("click", logout);
+
+async function handleCustomSampleUpload(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  setCustomSampleStatus("Checking custom sample...");
+  try {
+    const fileError = validateCustomSampleFile(file);
+    if (fileError) {
+      rejectCustomSample(fileError);
+      return;
+    }
+
+    const buffer = await file.arrayBuffer();
+    const decoded = decodeCustomSample(buffer);
+    if (decoded === null) {
+      rejectCustomSample("Upload blocked: sample must be UTF-8 text.");
+      return;
+    }
+
+    const text = decoded.replace(/^\uFEFF/, "");
+    const contentError = validateCustomSampleText(text);
+    if (contentError) {
+      rejectCustomSample(contentError);
+      return;
+    }
+
+    evidence.value = text;
+    resetRunState();
+    const sampleName = shortenFileName(file.name);
+    setCustomSampleStatus(`Custom sample loaded: ${sampleName}`);
+    summary.textContent = `${sampleName} loaded after upload safety checks. Run the agent to analyze it.`;
+    window.setTimeout(() => evidence.focus(), 0);
+  } catch {
+    rejectCustomSample("Upload failed. Use a UTF-8 text sample under 1 MB.");
+  } finally {
+    customSampleFile.value = "";
+  }
+}
+
+function validateCustomSampleFile(file) {
+  if (!file.size) {
+    return "Upload blocked: sample is empty.";
+  }
+  if (file.size > CUSTOM_SAMPLE_MAX_BYTES) {
+    return `Upload blocked: sample is ${formatBytes(file.size)}; limit is ${formatBytes(CUSTOM_SAMPLE_MAX_BYTES)}.`;
+  }
+  const extension = fileExtension(file.name);
+  if (!CUSTOM_SAMPLE_ALLOWED_EXTENSIONS.has(extension)) {
+    return "Upload blocked: use a text, JSON, Terraform, YAML, Markdown, or log sample.";
+  }
+  const mimeType = String(file.type || "").toLowerCase();
+  if (mimeType && !mimeType.startsWith("text/") && !CUSTOM_SAMPLE_ALLOWED_MIME_TYPES.has(mimeType)) {
+    return `Upload blocked: ${mimeType} is not an allowed text sample type.`;
+  }
+  return "";
+}
+
+function validateCustomSampleText(text) {
+  if (!text.trim()) {
+    return "Upload blocked: sample is empty.";
+  }
+  if (text.length > CUSTOM_SAMPLE_MAX_CHARACTERS) {
+    return `Upload blocked: sample has ${text.length.toLocaleString("en-US")} characters; limit is ${CUSTOM_SAMPLE_MAX_CHARACTERS.toLocaleString("en-US")}.`;
+  }
+  if (!isLikelyTextSample(text)) {
+    return "Upload blocked: sample looks like binary or control data.";
+  }
+  const secretLabel = findLikelySecret(text);
+  if (secretLabel) {
+    return `Upload blocked: possible ${secretLabel} detected. Redact secrets before analysis.`;
+  }
+  return "";
+}
+
+function decodeCustomSample(buffer) {
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(buffer);
+  } catch {
+    return null;
+  }
+}
+
+function isLikelyTextSample(text) {
+  if (text.includes("\u0000")) return false;
+  const sample = text.slice(0, 8192);
+  const controls = sample.match(/[\u0001-\u0008\u000B\u000C\u000E-\u001F\u007F]/g) || [];
+  return controls.length <= Math.max(8, sample.length * 0.01);
+}
+
+function findLikelySecret(text) {
+  const match = CUSTOM_SAMPLE_SECRET_PATTERNS.find(({ pattern }) => pattern.test(text));
+  return match?.label || "";
+}
+
+function rejectCustomSample(message) {
+  setCustomSampleStatus(message);
+  summary.textContent = message;
+}
+
+function setCustomSampleStatus(message) {
+  if (customSampleStatus) {
+    customSampleStatus.textContent = message;
+  }
+}
+
+function fileExtension(name) {
+  const match = String(name || "").toLowerCase().match(/\.[^.]+$/);
+  return match ? match[0] : "";
+}
+
+function shortenFileName(name) {
+  const value = String(name || "custom sample");
+  return value.length > 44 ? `${value.slice(0, 20)}...${value.slice(-18)}` : value;
+}
+
+function formatBytes(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024).toLocaleString("en-US")} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 async function runAgent(mode) {
   ensureRunStateForEvidence();

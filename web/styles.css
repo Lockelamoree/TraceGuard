@@ -663,6 +663,19 @@ h2 {
   text-align: right;
 }
 
+.upload-status {
+  grid-column: 1 / -1;
+  color: var(--accent-2);
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.upload-status:empty {
+  display: none;
+}
+
 .field-hint {
   grid-column: 1 / -1;
   margin: 0;

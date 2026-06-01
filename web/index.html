@@ -106,6 +106,14 @@
                   <option value="incident-response">Incident response bundle</option>
                 </select>
                 <button id="loadSample" type="button">Load sample</button>
+                <button id="customSampleButton" class="secondary" type="button" aria-describedby="customSampleStatus">Upload sample</button>
+                <input
+                  id="customSampleFile"
+                  class="visually-hidden"
+                  type="file"
+                  accept=".txt,.log,.json,.jsonl,.ndjson,.tf,.tfvars,.yaml,.yml,.md,text/plain,application/json"
+                  aria-label="Upload custom sample file"
+                />
                 <button id="runImproved" class="primary" type="button">Run agent</button>
                 <button id="runBaseline" class="quiet" type="button">Run baseline</button>
               </div>
@@ -113,6 +121,7 @@
             <div class="field-guide">
               <label class="field-label" for="evidence">Paste evidence bundle</label>
               <span id="evidenceStats" class="field-stats" aria-live="polite">0 characters</span>
+              <span id="customSampleStatus" class="upload-status" role="status" aria-live="polite"></span>
               <p id="evidenceHint" class="field-hint">Use GCP audit logs, IAM policy JSON, Terraform snippets, alert text, or repo metadata. Sample data keeps the judge path reproducible without cloud credentials.</p>
             </div>
             <textarea id="evidence" spellcheck="false" aria-describedby="evidenceHint evidenceStats" placeholder="Paste evidence here or load the sample bundle."></textarea>
