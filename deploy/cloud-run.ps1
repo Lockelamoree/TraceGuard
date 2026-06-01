@@ -12,7 +12,7 @@ param(
   [string]$PhoenixCollectorEndpoint = "",
   [string]$PhoenixMcpCommand = "phoenix-mcp",
   [int]$PhoenixMcpTimeoutSeconds = 12,
-  [string]$GeminiModel = "gemini-2.5-flash",
+  [string]$GeminiModel = "gemini-3-flash-preview",
   [int]$AuthSessionSeconds = 43200,
   [int]$LocalVerifyPort = 18080,
   [switch]$SkipLocalVerify
@@ -25,6 +25,14 @@ $repo = Split-Path -Parent (Split-Path -Parent $PSCommandPath)
 $configDir = Join-Path $repo ".gcloud"
 $localVerify = Join-Path $repo "deploy\local-verify.ps1"
 New-Item -ItemType Directory -Force $configDir | Out-Null
+Set-Location $repo
+
+try {
+  $SourceCommit = (& git rev-parse HEAD).Trim()
+}
+catch {
+  $SourceCommit = ""
+}
 
 function Invoke-Gcloud {
   if (Get-Command gcloud -ErrorAction SilentlyContinue) {
@@ -146,6 +154,10 @@ $envVars = @(
   "TRACEGUARD_REQUIRE_AUTH=true",
   "TRACEGUARD_AUTH_SESSION_SECONDS=$AuthSessionSeconds"
 )
+
+if ($SourceCommit) {
+  $envVars += "TRACEGUARD_SOURCE_COMMIT=$SourceCommit"
+}
 
 if ($PhoenixMcpCommand) {
   $envVars += "PHOENIX_MCP_COMMAND=$PhoenixMcpCommand"

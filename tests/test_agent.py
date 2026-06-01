@@ -19,7 +19,7 @@ from traceguard.auth import (
 from traceguard.config import RuntimeConfig
 from traceguard.observability import TraceContext
 from traceguard.parsers import parse_evidence_bundle
-from traceguard.phoenix_mcp import _mcp_environment, _safe_error, inspect_phoenix_mcp
+from traceguard.phoenix_mcp import PhoenixMcpResult, _mcp_environment, _safe_error, inspect_phoenix_mcp
 
 
 class FakeSpan:
@@ -113,6 +113,9 @@ class TraceGuardAgentTests(unittest.TestCase):
         self.assertGreaterEqual(result["metrics"]["eval_average"], 0.8)
         self.assertIn("gemini", result)
         self.assertFalse(result["gemini"]["enabled"])
+        self.assertEqual(result["improvement"]["status"], "eval_guided_local")
+        self.assertIn("eval:duplicate_pressure", result["improvement"]["eval_signal"])
+        self.assertIn("Observability Improvement Plan", result["report_markdown"])
 
     def test_all_sample_bundles_render_reports(self) -> None:
         for sample_path in Path("samples").glob("*.txt"):
@@ -141,6 +144,7 @@ class TraceGuardAgentTests(unittest.TestCase):
             "run_evals",
             "gemini_synthesis",
             "phoenix_mcp_introspection",
+            "plan_observability_improvement",
             "render_report",
         ):
             self.assertIn(span_name, spans)
@@ -175,6 +179,11 @@ class TraceGuardAgentTests(unittest.TestCase):
         self.assertFalse(mcp_span.attributes["traceguard.phoenix_mcp_attempted"])
         self.assertFalse(mcp_span.attributes["traceguard.phoenix_mcp_command_configured"])
         self.assertIn("traceguard.phoenix_mcp.completed", [name for name, _ in mcp_span.events])
+
+        improvement_span = spans["plan_observability_improvement"]
+        self.assertEqual(improvement_span.attributes["traceguard.improvement_status"], result["improvement"]["status"])
+        self.assertEqual(improvement_span.attributes["traceguard.improvement_source"], result["improvement"]["source"])
+        self.assertIn("traceguard.improvement.planned", [name for name, _ in improvement_span.events])
 
         report_span = spans["render_report"]
         self.assertEqual(report_span.attributes["traceguard.report_length"], len(result["report_markdown"]))
@@ -234,7 +243,7 @@ class TraceGuardAgentTests(unittest.TestCase):
             google_cloud_project="traceguard-prod",
             google_cloud_location="us-central1",
             google_genai_use_vertexai=True,
-            gemini_model="gemini-2.5-flash",
+            gemini_model="gemini-3-flash-preview",
             enable_gemini_synthesis=True,
             phoenix_project_name="traceguard-hackathon",
             phoenix_base_url="https://app.phoenix.arize.com",
@@ -351,7 +360,7 @@ class TraceGuardAgentTests(unittest.TestCase):
             google_cloud_project="traceguard-prod",
             google_cloud_location="us-central1",
             google_genai_use_vertexai=True,
-            gemini_model="gemini-2.5-flash",
+            gemini_model="gemini-3-flash-preview",
             enable_gemini_synthesis=True,
             phoenix_project_name="traceguard-hackathon",
             phoenix_base_url="https://app.phoenix.arize.com",
@@ -418,7 +427,7 @@ class TraceGuardAgentTests(unittest.TestCase):
             google_cloud_project="traceguard-prod",
             google_cloud_location="us-central1",
             google_genai_use_vertexai=True,
-            gemini_model="gemini-2.5-flash",
+            gemini_model="gemini-3-flash-preview",
             enable_gemini_synthesis=True,
             phoenix_project_name="traceguard-hackathon",
             phoenix_base_url="https://app.phoenix.arize.com",
@@ -486,7 +495,7 @@ class TraceGuardAgentTests(unittest.TestCase):
             google_cloud_project="traceguard-prod",
             google_cloud_location="us-central1",
             google_genai_use_vertexai=True,
-            gemini_model="gemini-2.5-flash",
+            gemini_model="gemini-3-flash-preview",
             enable_gemini_synthesis=True,
             phoenix_project_name="traceguard-hackathon",
             phoenix_base_url="https://app.phoenix.arize.com",
@@ -532,7 +541,7 @@ class TraceGuardAgentTests(unittest.TestCase):
             google_cloud_project="traceguard-prod",
             google_cloud_location="us-central1",
             google_genai_use_vertexai=True,
-            gemini_model="gemini-2.5-flash",
+            gemini_model="gemini-3-flash-preview",
             enable_gemini_synthesis=True,
             phoenix_project_name="traceguard-hackathon",
             phoenix_base_url="https://app.phoenix.arize.com",
@@ -559,6 +568,29 @@ class TraceGuardAgentTests(unittest.TestCase):
         self.assertNotIn("repo-control-gap", baseline_ids)
         self.assertIn("repo-control-gap", improved_ids)
         self.assertGreaterEqual(len(improved_ids), len(baseline_ids))
+
+    def test_phoenix_mcp_read_queries_drive_improvement_plan(self) -> None:
+        raw = Path("samples/gcp_incident_bundle.txt").read_text(encoding="utf-8")
+        mcp_result = PhoenixMcpResult(
+            status="ok",
+            summary="Phoenix MCP query succeeded.",
+            tool_names=("list-projects", "list-traces"),
+            queried_tool_names=("list-projects", "list-traces"),
+            resource_counts={"list-projects": 1, "list-traces": 2},
+            attempted=True,
+            command_configured=True,
+        )
+
+        with patch("traceguard.agent.inspect_phoenix_mcp", return_value=mcp_result):
+            result = analyze_bundle(raw, "improved")
+
+        improvement = result["improvement"]
+        self.assertEqual(improvement["status"], "observability_derived")
+        self.assertEqual(improvement["source"], "phoenix_mcp_read_queries+code_evals")
+        self.assertIn("mcp:query:list-traces=2", improvement["receipts"])
+        self.assertIn("cluster", improvement["next_run_change"].lower())
+        self.assertEqual(result["metrics"]["improvement_status"], "observability_derived")
+        self.assertIn("Observability Improvement Plan", result["report_markdown"])
 
     def test_empty_bundle_is_inconclusive_not_fake_clean(self) -> None:
         result = analyze_bundle("", "improved")

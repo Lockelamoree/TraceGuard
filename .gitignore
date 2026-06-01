@@ -6,8 +6,14 @@ dist/
 build/
 .venv/
 .env
+.env.*
+!.env.example
 node_modules/
 .traceguard-server.*.log
 traceguard-server.log
+traceguard-server-*.log
+traceguard-start.*
+traceguard-ui-review.*.log
+ui-review-artifacts/
 .gcloud/
 .secrets/

@@ -9,7 +9,7 @@ param(
   [string]$PhoenixCollectorEndpoint = "",
   [string]$PhoenixMcpCommand = "phoenix-mcp",
   [int]$PhoenixMcpTimeoutSeconds = 12,
-  [string]$GeminiModel = "gemini-2.5-flash",
+  [string]$GeminiModel = "gemini-3-flash-preview",
   [int]$AuthSessionSeconds = 43200,
   [int]$LocalVerifyPort = 18080,
   [switch]$SkipLocalVerify

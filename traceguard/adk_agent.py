@@ -36,7 +36,7 @@ def build_root_agent():
         return None
 
     return Agent(
-        model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
+        model=os.getenv("GEMINI_MODEL", "gemini-3-flash-preview"),
         name="traceguard",
         description="Evidence-grounded Google Cloud security incident triage agent.",
         instruction=(
@@ -50,4 +50,3 @@ def build_root_agent():
 
 
 root_agent = build_root_agent()
-

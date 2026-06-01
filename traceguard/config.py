@@ -32,7 +32,7 @@ class RuntimeConfig:
             google_cloud_project=project,
             google_cloud_location=location,
             google_genai_use_vertexai=use_vertex,
-            gemini_model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
+            gemini_model=os.getenv("GEMINI_MODEL", "gemini-3-flash-preview"),
             enable_gemini_synthesis=_bool_env("ENABLE_GEMINI_SYNTHESIS", default=bool(project)),
             phoenix_project_name=os.getenv("PHOENIX_PROJECT_NAME", "traceguard-hackathon"),
             phoenix_base_url=os.getenv("PHOENIX_BASE_URL", "https://app.phoenix.arize.com"),

@@ -34,6 +34,7 @@ Expected local outputs:
 - Proof scoreboard on the included sample: `10` evidence items, `11` findings, `8` critical/high findings, eval average around `0.94`, and `0` unsupported confirmed claims.
 - Local Gemini detail: `Gemini synthesis disabled; deterministic findings still produced.`
 - Local Phoenix MCP status: `local_replay`.
+- Local improvement plan: `eval_guided_local`, sourced from code eval receipts. On the sample bundle, duplicate-pressure is the weakest eval and the next-run change recommends clustering repeated findings while preserving every evidence ID.
 
 Screenshot proof:
 
@@ -57,16 +58,16 @@ Latest local verification I ran on May 31, 2026:
 python -m unittest discover -s tests -p "test_*.py"
 ```
 
-Result: `35` tests passed. In my local Codex shell, `python` and `py -3.11` were not on PATH, so I ran the same command with the bundled Python runtime. That does not change the app requirement; a normal Python 3.11+ install can run the suite.
+Result: `38` tests passed. In my local Codex shell, `python` and `py -3.11` were not on PATH, so I ran the same command with the bundled Python runtime. That does not change the app requirement; a normal Python 3.11+ install can run the suite.
 
-Latest hosted verification I ran on May 31, 2026:
+Latest hosted verification I ran on June 1, 2026:
 
 - Cloud Run service describe reported the latest ready revision serving `100%` of traffic.
 - `/health` returned `200`.
 - `HEAD /` and `HEAD /proof` returned `200`.
-- `/proof` returned a public non-secret receipt with `project=TraceGuard`, auth enabled, and `secrets_exposed=false`.
+- `/proof` returned a public non-secret receipt with `project=TraceGuard`, auth enabled, `secrets_exposed=false`, Gemini 3 model configuration, and a sanitized `latest_run` receipt.
 - `/api/auth/status` returned auth enabled and unauthenticated before login.
-- Authenticated sample run returned `10` evidence items, `11` findings, `8` critical/high findings, `0.94` eval average, Gemini validation `pass`, Phoenix tracing ready, Phoenix MCP `ok`, `27` MCP tools, and one read-only query path.
+- Authenticated sample run returned `10` evidence items, `11` findings, `8` critical/high findings, `0` unsupported confirmed claims, `0.94` eval average, Gemini 3 validation `pass` with `0` rejected evidence references, Phoenix tracing ready, Phoenix MCP `ok`, `27` MCP tools, and one read-only `list-traces` query path.
 
 The sanitized proof is in [docs/hosted-live-proof.md](docs/hosted-live-proof.md).
 
@@ -74,8 +75,8 @@ The sanitized proof is in [docs/hosted-live-proof.md](docs/hosted-live-proof.md)
 
 | Rubric area | TraceGuard evidence |
 | --- | --- |
-| Technological implementation | Cloud Run app, Gemini on Vertex AI, ADK `root_agent`, Phoenix OTEL, Phoenix MCP, code evals, auth-gated hosted demo. |
-| Design | Judge proof scoreboard, runtime badges, Arize loop panel, final report preview with evidence IDs. |
+| Technological implementation | Cloud Run app, Gemini on Vertex AI, ADK `root_agent`, Phoenix OTEL, Phoenix MCP, code evals, observability-derived improvement planner, auth-gated hosted demo. |
+| Design | Judge proof scoreboard, runtime badges, Arize loop panel, improvement receipt, final report preview with evidence IDs. |
 | Potential impact | Shortens cloud security triage while preserving confirmed/hypothesis boundaries for human reviewers. |
 | Quality of idea | Evidence-gated incident-report agent with observability-backed eval loop instead of unsupported AI summaries. |
 
@@ -91,9 +92,9 @@ Suggested checks:
 - `/api/auth/status` reports auth enabled and authenticated after login.
 - Runtime badges clearly identify whether Gemini, Phoenix OTEL, and Phoenix MCP are live or replay/skipped.
 - If Phoenix MCP is live, the runtime detail reports discovered tools and read-only `list-projects` / `list-traces` query status.
-- The Arize loop panel should show `Phoenix OTEL live`, MCP tool discovery/read-query proof, eval average, unsupported confirmed claim count, Gemini validation, and the baseline-to-improved delta.
+- The Arize loop panel should show `Phoenix OTEL live`, MCP tool discovery/read-query proof, eval average, unsupported confirmed claim count, Gemini validation, and the next-run improvement plan.
 - The proof scoreboard reports runtime duration, eval average, unsupported confirmed claims, Gemini validation status, MCP status, and critical/high count.
-- The final report cites evidence IDs for every confirmed finding.
+- The final report cites evidence IDs for every confirmed finding and includes an `Observability Improvement Plan` section with eval/MCP receipts.
 
 ## Claims Boundaries
 
@@ -101,4 +102,4 @@ TraceGuard does not claim exploitation, compromise, Gemini synthesis, Phoenix tr
 
 Local mode is deterministic. It labels Phoenix output as replay guidance instead of implying live MCP trace queries.
 
-The current build demonstrates an eval-guided baseline/improved replay loop. When Phoenix MCP is live, it also attempts read-only project/trace queries and exposes the receipt in the UI. The next production step is to use those Phoenix MCP trace/eval reads to generate improvement plans dynamically.
+The current build demonstrates an eval-guided baseline/improved loop plus a dynamic improvement planner. When Phoenix MCP is live, it attempts read-only project/trace queries and can mark the plan `observability_derived`; without Phoenix credentials, it falls back to `eval_guided_local` and says so. TraceGuard recommends the next checklist/reporting change from receipts, but it does not self-modify production code during a judge run.

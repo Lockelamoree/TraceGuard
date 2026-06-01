@@ -3,22 +3,24 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>TraceGuard</title>
+    <title>TraceGuard | Evidence-Gated Cloud Triage</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
+    <a class="skip-link" href="#evidence">Skip to evidence input</a>
     <section id="authGate" class="auth-gate hidden">
-      <form id="authForm" class="auth-panel">
+      <form id="authForm" class="auth-panel" aria-describedby="authHint">
         <p class="eyebrow">TraceGuard production access</p>
-        <h1>Access Key</h1>
-        <label for="authToken">Key</label>
-        <input id="authToken" name="authToken" type="password" autocomplete="current-password" required />
+        <h1>TraceGuard access</h1>
+        <p id="authHint" class="auth-hint">Use the temporary judge key from the private Devpost field. The key is never shown in the UI.</p>
+        <label for="authToken">Judge access key</label>
+        <input id="authToken" name="authToken" type="password" autocomplete="off" required />
         <button class="primary" type="submit">Unlock</button>
         <div id="authMessage" class="auth-message" role="status"></div>
       </form>
     </section>
 
-    <main id="appShell" class="shell hidden">
+    <main id="appShell" class="shell hidden" tabindex="-1">
       <section class="workbench">
         <header class="topbar">
           <div class="brand-block">
@@ -26,8 +28,67 @@
             <div class="title-row">
               <h1>TraceGuard</h1>
               <span class="track-badge">Security triage agent</span>
+              <div class="context-popover">
+                <button id="judgeContextButton" class="context-trigger" type="button" aria-describedby="judgeContextTooltip">
+                  Judge context
+                </button>
+                <div id="judgeContextTooltip" class="context-tooltip" role="tooltip">
+                  <p class="context-summary">For a cloud security lead staring at logs, IAM JSON, Terraform, alerts, and repo metadata: a report is only confirmed when the evidence IDs back it up.</p>
+                  <div class="story-strip" aria-label="30 second judge story">
+                    <article>
+                      <span>Problem</span>
+                      <strong>Cloud evidence arrives scattered.</strong>
+                      <p>Logs, IAM JSON, Terraform, alerts, and repo metadata land in different places after an incident.</p>
+                    </article>
+                    <article>
+                      <span>Agent promise</span>
+                      <strong>Confirmed means cited.</strong>
+                      <p>TraceGuard only marks findings confirmed when parsed evidence IDs support the claim.</p>
+                    </article>
+                    <article>
+                      <span>Track proof</span>
+                      <strong>Observe, evaluate, improve.</strong>
+                      <p>Gemini, Phoenix telemetry, MCP status, evals, and the next-run plan are visible in the workflow.</p>
+                    </article>
+                  </div>
+                  <div class="receipt-popover">
+                    <div class="receipt-trigger">
+                      <span>Judge receipt</span>
+                      <strong>Cited triage, eval receipts, Phoenix status, next-run improvement.</strong>
+                    </div>
+                    <div class="receipt-tooltip">
+                      <p class="receipt-tooltip-copy">TraceGuard turns scattered GCP incident evidence into a cited triage report, then uses eval and Phoenix status receipts to propose the next-run improvement.</p>
+                      <div class="receipt-grid" aria-label="Submission proof">
+                        <article>
+                          <span>Evidence</span>
+                          <strong>0 unsupported claims</strong>
+                        </article>
+                        <article>
+                          <span>Grounding receipt</span>
+                          <strong>94% eval avg</strong>
+                        </article>
+                        <article>
+                          <span>Phoenix status receipt</span>
+                          <strong>MCP + OTEL status</strong>
+                        </article>
+                      </div>
+                      <ol class="demo-steps" aria-label="Demo path steps">
+                        <li>Load sample</li>
+                        <li>Run agent</li>
+                        <li>Check receipts</li>
+                        <li>Copy report</li>
+                      </ol>
+                      <ul class="criteria-rail" aria-label="Hackathon requirements covered">
+                        <li><span>Google Cloud</span><strong>Cloud Run + Vertex AI Gemini</strong></li>
+                        <li><span>Agent surface</span><strong>ADK-compatible root_agent</strong></li>
+                        <li><span>Arize</span><strong>Phoenix OTEL + MCP receipts</strong></li>
+                        <li><span>Evidence gate</span><strong>Unsupported claims stay out</strong></li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-            <p class="subtitle">For a cloud security lead staring at logs, IAM JSON, Terraform, alerts, and repo metadata: a report is only confirmed when the evidence IDs back it up.</p>
           </div>
           <div class="topbar-actions">
             <div class="status-pill" id="runtimeStatus" role="status" aria-live="polite">Checking runtime...</div>
@@ -35,106 +96,35 @@
           </div>
         </header>
 
-        <section class="judge-brief" aria-label="30 second judge story">
-          <div class="brief-copy">
-            <span>30 second story</span>
-            <strong>TraceGuard turns scattered GCP incident evidence into a human-checkable security report, then shows the Phoenix/eval receipt for what improved.</strong>
-          </div>
-          <div class="brief-receipts" aria-label="Live proof receipts">
-            <span class="receipt-chip">Hosted Cloud Run</span>
-            <span class="receipt-chip">Gemini evidence validation</span>
-            <span class="receipt-chip">Phoenix status receipt</span>
-            <span class="receipt-chip">Grounding receipt</span>
-          </div>
-        </section>
-
-        <section class="proof-strip" aria-label="Submission proof">
-          <article class="proof-tile">
-            <span>Persona</span>
-            <strong>Cloud security lead</strong>
-            <em>Confirmed findings cite source IDs</em>
-          </article>
-          <article class="proof-tile">
-            <span>Evidence</span>
-            <strong>Every finding cites IDs</strong>
-            <em>No evidence, no confirmed claim</em>
-          </article>
-          <article class="proof-tile">
-            <span>Phoenix</span>
-            <strong>Phoenix trace/eval -> better run</strong>
-            <em>Live status, quality score, and delta shown together</em>
-          </article>
-          <article class="proof-tile">
-            <span>Improvement</span>
-            <strong>Baseline vs improved</strong>
-            <em>Delta visible before report export</em>
-          </article>
-        </section>
-
-        <section class="workflow-strip" aria-label="TraceGuard workflow">
-          <div class="workflow-step">
-            <span>01</span>
-            <strong>Evidence</strong>
-            <em>logs, IAM, Terraform</em>
-          </div>
-          <div class="workflow-step">
-            <span>02</span>
-            <strong>Parse</strong>
-            <em>structured artifacts</em>
-          </div>
-          <div class="workflow-step">
-            <span>03</span>
-            <strong>Triage</strong>
-            <em>risk and confidence</em>
-          </div>
-          <div class="workflow-step">
-            <span>04</span>
-            <strong>Evaluate</strong>
-            <em>grounding checks</em>
-          </div>
-          <div class="workflow-step">
-            <span>05</span>
-            <strong>Integrate</strong>
-            <em>Gemini + Phoenix MCP</em>
-          </div>
-          <div class="workflow-step">
-            <span>06</span>
-            <strong>Report</strong>
-            <em>operator handoff</em>
-          </div>
-        </section>
-
-        <section class="demo-path" aria-label="Demo path">
-          <span>Demo path</span>
-          <strong>1 Load sample</strong>
-          <strong>2 Run agent</strong>
-          <strong>3 Check Phoenix/eval receipts</strong>
-          <strong>4 Copy cited report</strong>
-        </section>
-
         <div class="grid">
           <section class="panel input-panel">
             <div class="panel-header">
               <h2>Evidence Bundle</h2>
               <div class="actions">
                 <button id="loadSample" type="button">Load sample</button>
-                <button id="runBaseline" type="button">Baseline</button>
                 <button id="runImproved" class="primary" type="button">Run agent</button>
+                <button id="runBaseline" class="quiet" type="button">Run baseline</button>
               </div>
             </div>
-            <textarea id="evidence" spellcheck="false" placeholder="Paste GCP audit logs, IAM policy JSON, Terraform snippets, alert text, or repo metadata here."></textarea>
+            <div class="field-guide">
+              <label class="field-label" for="evidence">Paste evidence bundle</label>
+              <span id="evidenceStats" class="field-stats" aria-live="polite">0 characters</span>
+              <p id="evidenceHint" class="field-hint">Use GCP audit logs, IAM policy JSON, Terraform snippets, alert text, or repo metadata. Sample data keeps the judge path reproducible without cloud credentials.</p>
+            </div>
+            <textarea id="evidence" spellcheck="false" aria-describedby="evidenceHint evidenceStats" placeholder="Paste evidence here or load the sample bundle."></textarea>
           </section>
 
-          <section class="panel console-panel">
+          <section id="runConsole" class="panel console-panel" aria-busy="false">
             <div class="panel-header">
               <h2>Agent Run Console</h2>
-              <button id="copyReport" type="button" disabled>Copy report</button>
+              <button id="copyReport" type="button" aria-describedby="copyHint" disabled>Copy report</button>
+              <span id="copyHint" class="visually-hidden">Copy becomes available after an improved agent run returns a report.</span>
             </div>
-            <div id="summary" class="summary">Load the sample bundle, then compare baseline and improved triage.</div>
-            <div id="runtimeDetail" class="summary compact">Runtime detail appears after a run. Local mode uses deterministic triage without claiming live Gemini or Phoenix telemetry.</div>
+            <div id="summary" class="summary" role="status" aria-live="polite" tabindex="-1">Load the sample bundle, then compare baseline and improved triage.</div>
+            <div id="runtimeDetail" class="summary compact" aria-live="polite">Runtime detail appears after a run. Local mode uses deterministic triage without claiming live Gemini or Phoenix telemetry.</div>
             <div id="proofScoreboard" class="scoreboard" aria-label="Judge proof scoreboard"></div>
             <div id="arizeLoop" class="arize-loop" aria-label="Arize improvement loop"></div>
-            <div id="geminiBrief" class="summary compact">Gemini synthesis appears here only when the live Vertex AI call succeeds.</div>
+            <div id="geminiBrief" class="summary compact" aria-live="polite">Gemini synthesis appears here only when the live Vertex AI call succeeds.</div>
             <div id="steps" class="steps"></div>
           </section>
         </div>
@@ -153,7 +143,7 @@
               <h2>Final Report Preview</h2>
               <span id="reportStatus" class="muted">No report yet</span>
             </div>
-            <pre id="reportPreview" class="report-preview">Run the improved agent to preview the generated markdown report here.</pre>
+            <pre id="reportPreview" class="report-preview" tabindex="0">Run the improved agent to preview the generated markdown report here.</pre>
           </div>
 
           <div class="panel">

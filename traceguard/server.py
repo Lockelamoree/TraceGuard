@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import mimetypes
+import os
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -22,6 +23,8 @@ from .config import RuntimeConfig
 
 ROOT = Path(__file__).resolve().parent.parent
 WEB_ROOT = ROOT / "web"
+LATEST_RUN_RECEIPT_PATH = ROOT / "docs" / "latest-run-receipt.json"
+LATEST_RUN_CACHE_PATH = Path(os.getenv("TRACEGUARD_LATEST_RUN_PATH", "/tmp/traceguard-latest-run.json"))
 PUBLIC_GET_PATHS = {
     "/",
     "/index.html",
@@ -39,6 +42,8 @@ LOGIN_WINDOW_SECONDS = 5 * 60
 LOGIN_LOCKOUT_SECONDS = 5 * 60
 _LOGIN_LOCK = threading.Lock()
 _LOGIN_FAILURES: dict[str, tuple[int, float, float]] = {}
+_LATEST_RUN_LOCK = threading.Lock()
+_LATEST_RUN_RECEIPT: dict[str, object] | None = None
 
 
 class TraceGuardHandler(BaseHTTPRequestHandler):
@@ -99,7 +104,9 @@ class TraceGuardHandler(BaseHTTPRequestHandler):
         length = min(int(self.headers.get("content-length", "0")), 2_000_000)
         try:
             body = self.rfile.read(length)
-            self._send(200, analyze_json(body), "application/json")
+            response_body = analyze_json(body)
+            _record_latest_run_receipt(response_body)
+            self._send(200, response_body, "application/json")
         except Exception as exc:  # pragma: no cover - defensive server boundary
             self._send(400, json.dumps({"error": str(exc)}).encode("utf-8"), "application/json")
 
@@ -193,6 +200,12 @@ class TraceGuardHandler(BaseHTTPRequestHandler):
                 "phoenix_mcp_configured": bool(runtime.phoenix_mcp_command),
                 "phoenix_mcp_server": runtime.phoenix_mcp_server,
             },
+            "deployment": {
+                "cloud_run_service": os.getenv("K_SERVICE", ""),
+                "cloud_run_revision": os.getenv("K_REVISION", ""),
+                "source_commit": os.getenv("TRACEGUARD_SOURCE_COMMIT", ""),
+            },
+            "latest_run": _latest_run_receipt(),
             "security_boundary": {
                 "auth_enabled": auth.enabled,
                 "protected_routes": ["/sample", "/api/runtime", "/api/analyze"],
@@ -314,6 +327,108 @@ def _url_host_matches(url: str, expected_host: str) -> bool:
     except ValueError:
         return False
     return parsed.scheme in {"http", "https"} and parsed.netloc.lower() == expected_host.lower()
+
+
+def _record_latest_run_receipt(response_body: bytes) -> None:
+    try:
+        result = json.loads(response_body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return
+    if not isinstance(result, dict) or result.get("error"):
+        return
+    receipt = _sanitize_run_receipt(result)
+    if not receipt:
+        return
+    with _LATEST_RUN_LOCK:
+        global _LATEST_RUN_RECEIPT
+        _LATEST_RUN_RECEIPT = receipt
+    try:
+        LATEST_RUN_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        LATEST_RUN_CACHE_PATH.write_text(json.dumps(receipt, sort_keys=True), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def _latest_run_receipt() -> dict[str, object]:
+    with _LATEST_RUN_LOCK:
+        if _LATEST_RUN_RECEIPT:
+            return dict(_LATEST_RUN_RECEIPT)
+    for path in (LATEST_RUN_CACHE_PATH, LATEST_RUN_RECEIPT_PATH):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if isinstance(payload, dict):
+            return payload
+    return {
+        "available": False,
+        "detail": "No sanitized hosted run receipt has been recorded yet.",
+    }
+
+
+def _sanitize_run_receipt(result: dict[str, object]) -> dict[str, object]:
+    metrics = _dict(result.get("metrics"))
+    gemini = _dict(result.get("gemini"))
+    arize = _dict(result.get("arize"))
+    mcp = _dict(arize.get("mcp"))
+    improvement = _dict(result.get("improvement"))
+    evidence = _list(result.get("evidence"))
+    findings = _list(result.get("findings"))
+    queried_tools = [str(item) for item in _list(mcp.get("queried_tool_names"))]
+    return {
+        "available": True,
+        "source": "runtime_authenticated_run",
+        "checked_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "cloud_run_revision": os.getenv("K_REVISION", ""),
+        "source_commit": os.getenv("TRACEGUARD_SOURCE_COMMIT", ""),
+        "run_id": str(result.get("run_id", "")),
+        "mode": str(result.get("mode", "")),
+        "evidence_items": _int(metrics.get("evidence_count"), len(evidence)),
+        "findings": _int(metrics.get("finding_count"), len(findings)),
+        "critical_or_high": _int(metrics.get("critical_high_count"), 0),
+        "unsupported_confirmed_claims": _int(metrics.get("unsupported_confirmed_claims"), 0),
+        "eval_average": _float(metrics.get("eval_average"), 0.0),
+        "run_duration_ms": _int(metrics.get("duration_ms"), 0),
+        "gemini_provider": str(gemini.get("provider", "Google Cloud Gemini on Vertex AI")),
+        "gemini_model": str(gemini.get("model", "")),
+        "gemini_ok": bool(gemini.get("ok")),
+        "gemini_validation_status": str(gemini.get("validation_status", "not_run")),
+        "gemini_accepted_claims": _int(gemini.get("accepted_claims"), 0),
+        "gemini_rejected_claims": _int(gemini.get("rejected_claims"), 0),
+        "arize_tracing_ready": bool(arize.get("tracing_ready")),
+        "arize_phoenix_enabled": bool(arize.get("phoenix_enabled")),
+        "arize_project": str(arize.get("phoenix_project", "")),
+        "phoenix_mcp_status": str(mcp.get("status", "")),
+        "phoenix_mcp_tool_count": _int(mcp.get("tool_count"), len(_list(mcp.get("tool_names")))),
+        "phoenix_mcp_queried_tools": queried_tools,
+        "phoenix_mcp_queried_tool_count": _int(mcp.get("queried_tool_count"), len(queried_tools)),
+        "phoenix_mcp_resource_counts": _dict(mcp.get("resource_counts")),
+        "improvement_status": str(improvement.get("status", "")),
+        "improvement_source": str(improvement.get("source", "")),
+        "improvement_receipts": _int(metrics.get("improvement_receipt_count"), len(_list(improvement.get("receipts")))),
+    }
+
+
+def _dict(value: object) -> dict[str, object]:
+    return value if isinstance(value, dict) else {}
+
+
+def _list(value: object) -> list[object]:
+    return value if isinstance(value, list) else []
+
+
+def _int(value: object, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _float(value: object, default: float) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def main() -> None:

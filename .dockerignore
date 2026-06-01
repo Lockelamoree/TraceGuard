@@ -10,4 +10,7 @@ __pycache__/
 traceguard-server.log
 traceguard-server-*.log
 .traceguard-server.*.log
+traceguard-start.*
+traceguard-ui-review.*.log
+ui-review-artifacts/
 node_modules/

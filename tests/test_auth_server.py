@@ -29,6 +29,8 @@ class TraceGuardAuthServerTests(unittest.TestCase):
         self.env_patch.start()
         with server_module._LOGIN_LOCK:
             server_module._LOGIN_FAILURES.clear()
+        with server_module._LATEST_RUN_LOCK:
+            server_module._LATEST_RUN_RECEIPT = None
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), TraceGuardHandler)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
@@ -41,6 +43,8 @@ class TraceGuardAuthServerTests(unittest.TestCase):
         self.env_patch.stop()
         with server_module._LOGIN_LOCK:
             server_module._LOGIN_FAILURES.clear()
+        with server_module._LATEST_RUN_LOCK:
+            server_module._LATEST_RUN_RECEIPT = None
 
     def test_protected_routes_require_signed_session(self) -> None:
         self.assertEqual(self.request("/")[0], 200)
@@ -77,10 +81,14 @@ class TraceGuardAuthServerTests(unittest.TestCase):
         self.assertEqual(payload["security_boundary"]["auth_enabled"], True)
         self.assertEqual(payload["security_boundary"]["secrets_exposed"], False)
         self.assertIn("traceguard/adk_agent.py", payload["google_cloud"]["adk_root_agent"])
+        self.assertTrue(payload["latest_run"]["available"])
+        self.assertEqual(payload["latest_run"]["gemini_rejected_claims"], 0)
+        self.assertIn("phoenix_mcp_status", payload["latest_run"])
         self.assertIn("Phoenix", payload["claim_boundary"])
         lowered = body.lower()
         self.assertNotIn("local-test-token", lowered)
         self.assertNotIn("phoenix_api_key", lowered)
+        self.assertNotIn("traceguard_auth_token", lowered)
         self.assertEqual(self.request("/proof", method="HEAD")[0], 200)
 
     def test_failed_login_attempts_are_throttled(self) -> None:
@@ -146,6 +154,12 @@ class TraceGuardAuthServerTests(unittest.TestCase):
             )[0],
             200,
         )
+        status, _, body = self.request("/proof")
+        self.assertEqual(status, 200)
+        payload = json.loads(body)
+        self.assertEqual(payload["latest_run"]["source"], "runtime_authenticated_run")
+        self.assertEqual(payload["latest_run"]["mode"], "improved")
+        self.assertIn("run_duration_ms", payload["latest_run"])
 
     def request(self, path: str, *, method: str = "GET", body=None, headers=None) -> tuple[int, dict[str, str], str]:
         data = None

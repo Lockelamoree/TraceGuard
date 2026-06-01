@@ -6,6 +6,7 @@ from dataclasses import asdict
 
 from .evals import run_evals
 from .gemini_adapter import synthesize_incident_brief
+from .improvement import ImprovementPlan, plan_observability_improvement
 from .models import AgentStep, EvalResult, EvidenceItem, Finding
 from .observability import new_trace_context, trace_span
 from .parsers import parse_evidence_bundle
@@ -76,12 +77,35 @@ def analyze_bundle(raw: str, mode: str = "improved") -> dict:
         span.add_event("traceguard.phoenix_mcp.completed", mcp_attrs)
     timings_ms["phoenix_mcp"] = _elapsed_ms(started)
     steps.append(AgentStep("Phoenix MCP introspection", mcp.step_status, mcp.summary))
+
+    started = time.perf_counter()
+    with trace_span(context, "plan_observability_improvement", span_context) as span:
+        improvement = plan_observability_improvement(evals, findings, evidence, mcp)
+        improvement_attrs = _improvement_span_attributes(improvement)
+        for key, value in improvement_attrs.items():
+            span.set_attribute(key, value)
+        span.add_event("traceguard.improvement.planned", improvement_attrs)
+    timings_ms["improvement"] = _elapsed_ms(started)
+    steps.append(
+        AgentStep(
+            "Observability improvement",
+            "complete" if improvement.status in {"observability_derived", "mcp_discovery_guided", "eval_guided_local"} else "warn",
+            f"{improvement.observation} Next run: {improvement.next_run_change}",
+        )
+    )
     steps.append(AgentStep("Report", "complete", f"Generated {len(findings)} findings and {len(evals)} quality evals."))
 
-    metrics = _run_metrics(run_started, timings_ms, evidence, findings, evals, gemini)
+    metrics = _run_metrics(run_started, timings_ms, evidence, findings, evals, gemini, improvement)
     started = time.perf_counter()
     with trace_span(context, "render_report", span_context) as span:
-        report_markdown = render_markdown_report(findings, evidence, evals, str(gemini.get("text", "")), metrics)
+        report_markdown = render_markdown_report(
+            findings,
+            evidence,
+            evals,
+            str(gemini.get("text", "")),
+            metrics,
+            asdict(improvement),
+        )
         timings_ms["report"] = _elapsed_ms(started)
         metrics["duration_ms"] = _elapsed_ms(run_started)
         metrics["timings_ms"] = dict(timings_ms)
@@ -102,6 +126,7 @@ def analyze_bundle(raw: str, mode: str = "improved") -> dict:
         "findings": [finding_to_dict(finding) for finding in findings],
         "evals": [asdict(item) for item in evals],
         "gemini": gemini,
+        "improvement": asdict(improvement),
         "metrics": metrics,
         "report_markdown": report_markdown,
         "arize": {
@@ -289,6 +314,18 @@ def _mcp_span_attributes(mcp: PhoenixMcpResult) -> dict[str, object]:
     }
 
 
+def _improvement_span_attributes(improvement: ImprovementPlan) -> dict[str, object]:
+    return {
+        "traceguard.improvement_status": improvement.status,
+        "traceguard.improvement_source": improvement.source,
+        "traceguard.improvement_eval_signal": improvement.eval_signal,
+        "traceguard.improvement_mcp_signal": improvement.mcp_signal,
+        "traceguard.improvement_receipts": improvement.receipts,
+        "traceguard.improvement_recommendation": improvement.recommendation[:300],
+        "traceguard.improvement_next_run_change": improvement.next_run_change[:300],
+    }
+
+
 def _attribute_suffix(name: str) -> str:
     suffix = "".join(char if char.isalnum() else "_" for char in name.lower()).strip("_")
     return suffix or "unnamed"
@@ -301,6 +338,7 @@ def _run_metrics(
     findings: list[Finding],
     evals: list[EvalResult],
     gemini: dict[str, object],
+    improvement: ImprovementPlan,
 ) -> dict[str, object]:
     evidence_ids = {item.id for item in evidence}
     unsupported_confirmed = [
@@ -323,6 +361,9 @@ def _run_metrics(
         "gemini_validation_status": str(gemini.get("validation_status", "not_run")),
         "gemini_accepted_claims": int(gemini.get("accepted_claims", 0) or 0),
         "gemini_rejected_claims": int(gemini.get("rejected_claims", 0) or 0),
+        "improvement_status": improvement.status,
+        "improvement_source": improvement.source,
+        "improvement_receipt_count": len(improvement.receipts),
     }
 
 
@@ -332,6 +373,8 @@ def _metric_span_attributes(metrics: dict[str, object]) -> dict[str, object]:
         "traceguard.unsupported_confirmed_claims": metrics.get("unsupported_confirmed_claims", 0),
         "traceguard.eval_average": metrics.get("eval_average", 0),
         "traceguard.critical_high_count": metrics.get("critical_high_count", 0),
+        "traceguard.improvement_status": str(metrics.get("improvement_status", "")),
+        "traceguard.improvement_receipt_count": metrics.get("improvement_receipt_count", 0),
     }
 
 

@@ -14,13 +14,18 @@ const reportStatus = document.querySelector("#reportStatus");
 const reportPreview = document.querySelector("#reportPreview");
 const copyReportButton = document.querySelector("#copyReport");
 const runtimeStatus = document.querySelector("#runtimeStatus");
+const runConsole = document.querySelector("#runConsole");
 const authGate = document.querySelector("#authGate");
 const appShell = document.querySelector("#appShell");
 const authForm = document.querySelector("#authForm");
 const authToken = document.querySelector("#authToken");
 const authMessage = document.querySelector("#authMessage");
 const logoutButton = document.querySelector("#logoutButton");
+const evidenceStats = document.querySelector("#evidenceStats");
 let lastReport = "";
+const INITIAL_SUMMARY = "Load the sample bundle, then compare baseline and improved triage.";
+const INITIAL_RUNTIME_DETAIL = "Runtime detail appears after a run. Local mode uses deterministic triage without claiming live Gemini or Phoenix telemetry.";
+const INITIAL_GEMINI_DETAIL = "Gemini synthesis appears here only when the live Vertex AI call succeeds.";
 const runState = {
   evidenceText: "",
   baseline: null,
@@ -33,29 +38,34 @@ renderDelta();
 renderReportPreview("");
 renderProofScoreboard(null);
 renderArizeLoop(null);
+updateEvidenceStats();
 initialize();
 
 document.querySelector("#loadSample").addEventListener("click", async () => {
-  const response = await fetchWithAuth("/sample");
-  if (!response) return;
-  evidence.value = await response.text();
-  resetRunState();
-  summary.textContent = "Sample loaded. Run the improved agent to capture the baseline and improved delta.";
+  setBusy(true);
+  try {
+    const response = await fetchWithAuth("/sample");
+    if (!response) return;
+    evidence.value = await response.text();
+    resetRunState();
+    summary.textContent = "Sample loaded. Run the improved agent to capture the baseline and improved delta.";
+  } catch {
+    summary.textContent = "Sample load failed. Check the local server or hosted session and try again.";
+  } finally {
+    setBusy(false);
+  }
 });
 
 document.querySelector("#runBaseline").addEventListener("click", () => runAgent("baseline"));
 document.querySelector("#runImproved").addEventListener("click", () => runAgent("improved"));
 evidence.addEventListener("input", resetRunState);
-copyReportButton.addEventListener("click", async () => {
-  if (!lastReport) return;
-  await navigator.clipboard.writeText(lastReport);
-  summary.textContent = "Report copied.";
-});
+copyReportButton.addEventListener("click", copyReport);
 authForm.addEventListener("submit", login);
 logoutButton.addEventListener("click", logout);
 
 async function runAgent(mode) {
   ensureRunStateForEvidence();
+  markRunPending(mode);
   setBusy(true);
   try {
     if (mode === "improved" && !runState.baseline) {
@@ -76,11 +86,15 @@ async function runAgent(mode) {
 }
 
 async function requestAnalysis(mode) {
-  const response = await fetchWithAuth("/api/analyze", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ evidence_text: evidence.value, mode }),
-  });
+  const response = await fetchWithAuth(
+    "/api/analyze",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ evidence_text: evidence.value, mode }),
+    },
+    "Agent run failed before the server returned a response."
+  );
   if (!response) return null;
   const result = await response.json().catch(() => ({ error: "Agent returned invalid JSON." }));
   if (!response.ok || result.error) {
@@ -108,11 +122,17 @@ async function initialize() {
 async function login(event) {
   event.preventDefault();
   authMessage.textContent = "Checking key...";
-  const response = await fetch("/api/auth/login", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ token: authToken.value }),
-  });
+  let response;
+  try {
+    response = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ token: authToken.value }),
+    });
+  } catch {
+    authMessage.textContent = "Login failed before the server responded.";
+    return;
+  }
   const result = await response.json().catch(() => ({}));
   if (!response.ok || !result.authenticated) {
     authMessage.textContent = result.error || "Invalid access key.";
@@ -123,6 +143,7 @@ async function login(event) {
   authMessage.textContent = "";
   showApp(result.enabled);
   await loadRuntimeStatus();
+  window.setTimeout(() => evidence.focus(), 0);
 }
 
 async function logout() {
@@ -130,8 +151,14 @@ async function logout() {
   showAuthGate("Locked.");
 }
 
-async function fetchWithAuth(url, options) {
-  const response = await fetch(url, options);
+async function fetchWithAuth(url, options, failureMessage = "Request failed before the server responded.") {
+  let response;
+  try {
+    response = await fetch(url, options);
+  } catch {
+    summary.textContent = failureMessage;
+    return null;
+  }
   if (response.status === 401) {
     showAuthGate("Session expired.");
     return null;
@@ -151,6 +178,25 @@ function showApp(authEnabled) {
   authGate.classList.add("hidden");
   appShell.classList.remove("hidden");
   logoutButton.classList.toggle("hidden", !authEnabled);
+}
+
+async function copyReport() {
+  if (!lastReport) return;
+  try {
+    if (!navigator.clipboard?.writeText) {
+      throw new Error("clipboard unavailable");
+    }
+    await navigator.clipboard.writeText(lastReport);
+    summary.textContent = "Report copied.";
+  } catch {
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(reportPreview);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    reportPreview.focus();
+    summary.textContent = "Clipboard blocked by the browser. The report preview is selected for manual copy.";
+  }
 }
 
 async function loadRuntimeStatus() {
@@ -227,17 +273,35 @@ function render(result) {
       <div class="detail">${escapeHtml(item.detail)}</div>
     </article>
   `).join("");
+  summary.focus({ preventScroll: false });
 }
 
 function resetRunState() {
+  updateEvidenceStats();
   runState.evidenceText = evidence.value;
   runState.baseline = null;
   runState.improved = null;
   lastReport = "";
+  summary.textContent = evidence.value ? "Evidence changed. Run the agent again to refresh all findings and receipts." : INITIAL_SUMMARY;
+  runtimeDetail.textContent = INITIAL_RUNTIME_DETAIL;
+  geminiBrief.textContent = INITIAL_GEMINI_DETAIL;
+  steps.innerHTML = "";
+  findings.innerHTML = "";
+  evals.innerHTML = "";
+  findingCount.textContent = "0 findings";
   renderReportPreview("");
   renderProofScoreboard(null);
   renderArizeLoop(null);
   renderDelta();
+}
+
+function updateEvidenceStats() {
+  if (!evidenceStats) return;
+  const characters = evidence.value.length;
+  const lines = evidence.value ? evidence.value.split(/\r\n|\r|\n/).length : 0;
+  const characterLabel = characters === 1 ? "character" : "characters";
+  const lineLabel = lines === 1 ? "line" : "lines";
+  evidenceStats.textContent = `${characters.toLocaleString("en-US")} ${characterLabel} - ${lines.toLocaleString("en-US")} ${lineLabel}`;
 }
 
 function ensureRunStateForEvidence() {
@@ -256,10 +320,26 @@ function rememberRun(result) {
   }
 }
 
+function markRunPending(mode) {
+  lastReport = "";
+  summary.textContent = mode === "baseline" ? "Running baseline triage..." : "Running improved triage...";
+  runtimeDetail.textContent = "Run in progress. Receipts will refresh when the current result returns.";
+  geminiBrief.textContent = INITIAL_GEMINI_DETAIL;
+  steps.innerHTML = "";
+  findings.innerHTML = "";
+  evals.innerHTML = "";
+  findingCount.textContent = "0 findings";
+  renderReportPreview("");
+  renderProofScoreboard(null);
+  renderArizeLoop(null);
+}
+
 function setBusy(isBusy) {
   actionButtons.forEach((button) => {
     button.disabled = isBusy;
   });
+  copyReportButton.disabled = isBusy || !lastReport;
+  runConsole.setAttribute("aria-busy", String(isBusy));
 }
 
 function renderRuntimeFromResult(result) {
@@ -308,6 +388,10 @@ function renderRuntimeFromResult(result) {
   const mcpDetail = result.arize?.mcp?.summary
     ? escapeHtml(result.arize.mcp.summary)
     : "Phoenix MCP introspection status was not returned.";
+  const improvement = result.improvement || {};
+  const improvementDetail = improvement.observation
+    ? `Improvement plan (${escapeHtml(improvement.status || "unknown")}): ${escapeHtml(improvement.observation)} ${escapeHtml(improvement.next_run_change || "")}`
+    : "Improvement plan was not returned.";
   const mcpQueries = Array.isArray(result.arize?.mcp?.queried_tool_names) && result.arize.mcp.queried_tool_names.length
     ? `Read-only MCP queries: ${escapeHtml(result.arize.mcp.queried_tool_names.join(", "))}.`
     : "No read-only Phoenix trace/project query completed in this run.";
@@ -329,6 +413,7 @@ function renderRuntimeFromResult(result) {
     <div class="detail">${phoenixDetail}</div>
     <div class="detail">${mcpDetail}</div>
     <div class="detail">${mcpQueries}</div>
+    <div class="detail">${improvementDetail}</div>
   `;
 }
 
@@ -360,6 +445,7 @@ function renderProofScoreboard(result) {
       ? `${Number(mcp.tool_count || 0)} tools`
       : mcp.status || "skipped";
   const geminiValidation = metrics.gemini_validation_status || result.gemini?.validation_status || "not_run";
+  const improvement = result.improvement || {};
 
   proofScoreboard.innerHTML = `
     ${renderScoreCard("Run receipt", duration ? `${duration} ms` : "Measured", "End-to-end agent run")}
@@ -367,34 +453,39 @@ function renderProofScoreboard(result) {
     ${renderScoreCard("Eval receipt", `${Math.round(evalAverage * 100)}%`, "Report quality")}
     ${renderScoreCard("Gemini", geminiValidation, "Evidence-ID validator")}
     ${renderScoreCard("Phoenix MCP", mcpLabel, "Read-only path")}
+    ${renderScoreCard("Improve plan", improvementStatusLabel(improvement.status), "Next-run change")}
     ${renderScoreCard("Critical/high", Number(metrics.critical_high_count ?? countCriticalHigh(result.findings)), "Priority findings")}
   `;
 }
 
 function renderArizeLoop(result) {
   if (!result) {
-    arizeLoop.innerHTML = `
-      <article class="loop-card loop-receipt pending">
-        <span>Improvement receipt</span>
-        <strong>Phoenix trace/eval -> checklist change -> better run</strong>
-        <em>Run the agent to populate the live proof chain.</em>
-      </article>
-      <article class="loop-card pending">
-        <span>01 Observe</span>
-        <strong>Phoenix pending</strong>
-        <em>Run the agent to verify OTEL and MCP status.</em>
-      </article>
-      <article class="loop-card pending">
-        <span>02 Evaluate</span>
-        <strong>Evals pending</strong>
-        <em>Grounding and report checks appear after analysis.</em>
-      </article>
-      <article class="loop-card pending">
-        <span>03 Improve</span>
-        <strong>Delta pending</strong>
-        <em>Baseline vs improved coverage is shown after both runs.</em>
-      </article>
-    `;
+    arizeLoop.innerHTML = [
+      renderLoopCard(
+        "loop-receipt pending",
+        "Improvement receipt",
+        "Phoenix trace/eval -> checklist change -> better run",
+        "Run the agent to populate the live proof chain."
+      ),
+      renderLoopCard(
+        "pending",
+        "01 Observe",
+        "Phoenix pending",
+        "Run the agent to verify OTEL and MCP status."
+      ),
+      renderLoopCard(
+        "pending",
+        "02 Evaluate",
+        "Evals pending",
+        "Grounding and report checks appear after analysis."
+      ),
+      renderLoopCard(
+        "pending",
+        "03 Improve",
+        "Delta pending",
+        "Baseline vs improved coverage is shown after both runs."
+      ),
+    ].join("");
     return;
   }
 
@@ -404,6 +495,7 @@ function renderArizeLoop(result) {
   const queried = Array.isArray(mcp.queried_tool_names) ? mcp.queried_tool_names : [];
   const evalAverage = Number(metrics.eval_average || avgEvalScore(result.evals));
   const unsupported = Number(metrics.unsupported_confirmed_claims || 0);
+  const improvement = result.improvement || {};
   const baseline = runState.baseline;
   const improved = runState.improved || (result.mode === "improved" ? result : null);
   const improvedOnly = baseline && improved
@@ -417,31 +509,61 @@ function renderArizeLoop(result) {
       ? `${Number(mcp.tool_count || 0)} tools discovered`
       : mcp.status || "MCP not run";
   const improvementReceipt = baseline && improved
-    ? `${otelLive ? "Phoenix OTEL live" : "Trace context shown"}; eval avg ${Math.round(evalAverage * 100)}%; ${formatSigned(findingGain)} findings in improved run.`
+    ? `${improvementStatusLabel(improvement.status)}; ${improvement.eval_signal || `eval avg ${Math.round(evalAverage * 100)}%`}; ${formatSigned(findingGain)} findings in improved run.`
     : "Baseline and improved runs appear here as one proof chain.";
 
-  arizeLoop.innerHTML = `
-    <article class="loop-card loop-receipt ${baseline && improved ? "good" : "warn"}">
-      <span>Improvement receipt</span>
-      <strong>Phoenix trace/eval -> checklist change -> better run</strong>
-      <em>${escapeHtml(improvementReceipt)}</em>
-    </article>
-    <article class="loop-card ${otelLive ? "good" : "warn"}">
-      <span>01 Observe</span>
-      <strong>${otelLive ? "Phoenix OTEL live" : result.arize?.phoenix_enabled ? "Phoenix configured" : "Local replay"}</strong>
-      <em>${escapeHtml(mcpProof)}</em>
-    </article>
-    <article class="loop-card ${unsupported === 0 ? "good" : "warn"}">
-      <span>02 Evaluate</span>
-      <strong>${Math.round(evalAverage * 100)}% eval avg</strong>
-      <em>${unsupported} unsupported confirmed claims; Gemini ${escapeHtml(metrics.gemini_validation_status || result.gemini?.validation_status || "not_run")}.</em>
-    </article>
-    <article class="loop-card ${baseline && improved ? "good" : "warn"}">
-      <span>03 Improve</span>
-      <strong>${baseline && improved ? `${formatSigned(findingGain)} findings` : "Baseline pending"}</strong>
-      <em>${baseline && improved ? improvementSummary(improvedOnly) : "Run improved to show the baseline-to-improved loop."}</em>
+  arizeLoop.innerHTML = [
+    renderLoopCard(
+      `loop-receipt ${improvementTone(improvement.status)}`,
+      "Improvement receipt",
+      improvement.source || "code_evals",
+      improvementReceipt
+    ),
+    renderLoopCard(
+      otelLive ? "good" : "warn",
+      "01 Observe",
+      otelLive ? "Phoenix OTEL live" : result.arize?.phoenix_enabled ? "Phoenix configured" : "Local replay",
+      mcpProof
+    ),
+    renderLoopCard(
+      unsupported === 0 ? "good" : "warn",
+      "02 Evaluate",
+      `${Math.round(evalAverage * 100)}% eval avg`,
+      `${unsupported} unsupported confirmed claims; Gemini ${metrics.gemini_validation_status || result.gemini?.validation_status || "not_run"}.`
+    ),
+    renderLoopCard(
+      baseline && improved ? "good" : "warn",
+      "03 Improve",
+      improvementStatusLabel(improvement.status),
+      improvement.next_run_change || (baseline && improved ? improvementSummary(improvedOnly) : "Run improved to show the baseline-to-improved loop.")
+    ),
+  ].join("");
+}
+
+function renderLoopCard(classes, label, value, detail) {
+  const cardLabel = `${label}: ${value}. ${detail}`;
+  return `
+    <article class="loop-card ${escapeHtml(classes)} tooltip-trigger" data-tooltip="${escapeHtml(detail)}" aria-label="${escapeHtml(cardLabel)}">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
     </article>
   `;
+}
+
+function improvementStatusLabel(status) {
+  const labels = {
+    observability_derived: "Phoenix-derived",
+    mcp_discovery_guided: "MCP-guided",
+    eval_guided_local: "Eval-guided",
+    no_evals: "No evals",
+  };
+  return labels[status] || "Pending";
+}
+
+function improvementTone(status) {
+  if (status === "observability_derived") return "good";
+  if (status === "mcp_discovery_guided" || status === "eval_guided_local") return "warn";
+  return "pending";
 }
 
 function improvementSummary(improvedOnly) {
@@ -458,11 +580,11 @@ function formatSigned(value) {
 }
 
 function renderScoreCard(label, value, detail) {
+  const cardLabel = `${label}: ${value}. ${detail}`;
   return `
-    <article class="score-card">
+    <article class="score-card tooltip-trigger" data-tooltip="${escapeHtml(detail)}" aria-label="${escapeHtml(cardLabel)}">
       <span>${escapeHtml(label)}</span>
       <strong>${escapeHtml(value)}</strong>
-      <em>${escapeHtml(detail)}</em>
     </article>
   `;
 }

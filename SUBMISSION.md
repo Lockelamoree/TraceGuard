@@ -6,7 +6,7 @@ I built TraceGuard for the moment after a cloud incident when a security lead ha
 
 My main constraint was evidence discipline: if TraceGuard cannot back a claim with parsed evidence, it should not dress it up as confirmed. Security teams already have enough confident nonsense to clean up.
 
-TraceGuard is my Arize track submission. The hosted path uses Cloud Run, Gemini on Vertex AI for narrative synthesis, Phoenix/OpenTelemetry spans for run visibility, a pinned Phoenix MCP command for read-only tool discovery, and evals that catch unsupported or low-quality report output.
+TraceGuard is my Arize track submission. The hosted path uses Cloud Run, Gemini on Vertex AI for narrative synthesis, Phoenix/OpenTelemetry spans for run visibility, a pinned Phoenix MCP command for read-only tool discovery, and evals that catch unsupported or low-quality report output. The agent now turns those eval/MCP receipts into a concrete next-run improvement plan instead of leaving observability as a screenshot.
 
 Live project URL: https://traceguard-cnhtsa5yrq-uc.a.run.app
 
@@ -18,7 +18,7 @@ Hosted live proof: `docs/hosted-live-proof.md`
 
 Demo video shotlist: `docs/demo-video-shotlist.md`
 
-Judge access: if the hosted app asks for an access key, use the temporary judge key provided in the Devpost submission field. The local demo needs no cloud credentials and still shows deterministic triage, baseline/improved comparison, evals, and report export.
+Judge access: if the hosted app asks for an access key, use the temporary judge key provided in the Devpost submission field. The local demo needs no cloud credentials and still shows deterministic triage, baseline/improved comparison, evals, improvement planning, and report export.
 
 ## Judge Quickstart
 
@@ -32,7 +32,7 @@ Judge access: if the hosted app asks for an access key, use the temporary judge 
    - Public access moves to critical.
    - Disabled branch protection and secret scanning become explicit repo-control findings.
 6. Check the proof scoreboard: eval average, unsupported confirmed claims, Gemini validation, Phoenix MCP status, runtime duration, and critical/high count.
-7. Check the Arize loop panel: `Observe` should show Phoenix OTEL/MCP status, `Evaluate` should show eval/grounding quality, and `Improve` should show the baseline-to-improved delta.
+7. Check the Arize loop panel: `Observe` should show Phoenix OTEL/MCP status, `Evaluate` should show eval/grounding quality, and `Improve` should show the observability-derived next-run change.
 8. Open the final report preview and check that confirmed findings cite evidence IDs.
 
 Local command:
@@ -62,6 +62,9 @@ flowchart TD
     agent -. "read-only initialize, tools/list, list-projects, list-traces" .-> mcp["Phoenix MCP"]
     mcp -. "status and tool count" .-> status["Runtime badges / run steps"]
     phoenix -. "trace status" .-> status
+    evals --> improve["Improvement planner"]
+    mcp --> improve
+    improve --> report
 ```
 
 More detail lives in `PROJECT_VISUALIZATION.md`.
@@ -72,6 +75,7 @@ More detail lives in `PROJECT_VISUALIZATION.md`.
 | --- | --- | --- | --- |
 | Deterministic triage | Yes | Yes | No |
 | Baseline/improved delta | Yes | Yes | No |
+| Observability improvement plan | Eval-guided local plan | Yes when runtime reports `observability_derived` | Uses eval plus MCP receipts; does not self-modify code |
 | Gemini on Vertex AI | Disabled without env vars | Yes when runtime badge reports Gemini live | Requires Google Cloud project/config |
 | Phoenix OTEL | Local replay without env vars | Yes when runtime badge reports Phoenix OTEL live | Requires Phoenix key/collector |
 | Phoenix MCP | Local replay without env vars | Yes when runtime badge reports MCP live | Requires pinned `PHOENIX_MCP_COMMAND` |
@@ -83,8 +87,9 @@ More detail lives in `PROJECT_VISUALIZATION.md`.
 - Produces a report where every confirmed finding cites evidence IDs.
 - Shows a baseline run and an improved run so the delta is visible.
 - Runs evals for evidence grounding, confirmed-claim hygiene, detection usefulness, remediation usefulness, severity calibration, and duplicate pressure.
+- Converts the weakest eval plus Phoenix MCP read-query receipt into a concrete next-run improvement plan.
 - Shows a proof scoreboard so the judge can see the run metrics without reading the whole report: unsupported confirmed claims, eval average, runtime duration, Gemini validation, MCP status, and critical/high count.
-- Shows the Arize loop as `Observe -> Evaluate -> Improve`, tying Phoenix trace/MCP proof to eval quality and the improved run delta.
+- Shows the Arize loop as `Observe -> Evaluate -> Improve`, tying Phoenix trace/MCP proof to eval quality and a specific next-run change.
 - Renders the final report in-app and keeps a clipboard export for handoff.
 
 ## Hackathon Compliance Proof
@@ -93,19 +98,19 @@ More detail lives in `PROJECT_VISUALIZATION.md`.
 - Google Cloud deployment target: Cloud Run.
 - Google Cloud AI target: Gemini on Vertex AI through the Google Gen AI SDK version line required by Google ADK.
 - Agent surface: ADK-compatible `root_agent` in `traceguard/adk_agent.py`.
-- Arize: Phoenix Cloud, Phoenix OTEL instrumentation, and a stdio Phoenix MCP client that performs read-only `initialize`, `tools/list`, `list-projects`, and `list-traces` when configured and supported by the server.
+- Arize: Phoenix Cloud, Phoenix OTEL instrumentation, a stdio Phoenix MCP client that performs read-only `initialize`, `tools/list`, `list-projects`, and `list-traces` when configured and supported by the server, plus an improvement planner that cites those receipts.
 - Python standard library for the local backend.
 - HTML, CSS, and JavaScript for the judge-facing web app.
 
 ## Arize Integration Story
 
-I treated observability as part of the agent loop, not a screenshot at the end. Each triage run has traceable phases: parsing, finding derivation, validation, evals, Gemini synthesis, Phoenix MCP introspection, and report generation.
+I treated observability as part of the agent loop, not a screenshot at the end. Each triage run has traceable phases: parsing, finding derivation, validation, evals, Gemini synthesis, Phoenix MCP introspection, improvement planning, and report generation.
 
-In production mode, Phoenix/OpenTelemetry receives run metadata such as evidence mix, finding IDs/severities, eval scores, Gemini status, MCP status/tool count, read-only MCP query names, and report length. When `PHOENIX_MCP_COMMAND` is configured and OTEL is live, TraceGuard starts the Phoenix MCP server over stdio, initializes a JSON-RPC session, performs `tools/list`, then attempts read-only `list-projects` and `list-traces` queries. In local no-credential mode, the app labels the Phoenix step as replay/demo output instead of pretending live trace queries happened.
+In production mode, Phoenix/OpenTelemetry receives run metadata such as evidence mix, finding IDs/severities, eval scores, Gemini status, MCP status/tool count, read-only MCP query names, improvement-plan source/status, and report length. When `PHOENIX_MCP_COMMAND` is configured and OTEL is live, TraceGuard starts the Phoenix MCP server over stdio, initializes a JSON-RPC session, performs `tools/list`, then attempts read-only `list-projects` and `list-traces` queries. In local no-credential mode, the app labels the Phoenix step as replay/demo output instead of pretending live trace queries happened.
 
-The improved run shows how eval feedback changes the checklist: public access is promoted from high to critical confidence, and disabled repository controls become explicit findings instead of staying buried in raw evidence. This is the honest boundary for the current build: Phoenix tracing/MCP and evals make the run observable and judge-verifiable, while the improved checklist is eval-guided rather than autonomous online learning from historical traces.
+The improved run shows two levels of improvement. First, the deterministic improved checklist promotes public access from high to critical confidence and turns disabled repository controls into explicit findings instead of burying them in raw evidence. Second, `traceguard/improvement.py` reads the run's weakest eval signal and Phoenix MCP read-query receipt, then emits a next-run change such as clustering repeated findings while preserving every evidence ID. If Phoenix MCP completes read-only trace/project queries, the plan is marked `observability_derived`; otherwise it is explicitly `eval_guided_local`.
 
-The hosted UI now makes that loop visible in one place: Phoenix OTEL/MCP status proves the observability path, the eval tile shows grounding quality, and the improvement tile shows the baseline-to-improved finding gain. The repo also includes cropped hosted proof screenshots in `docs/screenshots/` so judges can verify the live integration without relying on one oversized capture.
+The hosted UI now makes that loop visible in one place: Phoenix OTEL/MCP status proves the observability path, the eval tile shows grounding quality, and the improvement tile shows the next-run change. The repo also includes cropped hosted proof screenshots in `docs/screenshots/` so judges can verify the live integration without relying on one oversized capture.
 
 I also added a small guardrail for the live Gemini brief: the narrative is shown only if it cites evidence IDs known to the deterministic run. Unsupported evidence-like references are rejected and the UI reports the validation state. The deterministic findings still remain the source of truth either way.
 
@@ -115,7 +120,7 @@ For hosted deployment, configure:
 - `GOOGLE_CLOUD_LOCATION`
 - `GOOGLE_GENAI_USE_VERTEXAI=True`
 - `ENABLE_GEMINI_SYNTHESIS=true`
-- `GEMINI_MODEL=gemini-2.5-flash`
+- `GEMINI_MODEL=gemini-3-flash-preview`
 - `PHOENIX_API_KEY`
 - `PHOENIX_BASE_URL=https://app.phoenix.arize.com`
 - `PHOENIX_COLLECTOR_ENDPOINT`
@@ -143,7 +148,7 @@ Load the sample bundle. Run the baseline agent. Show findings for public Cloud R
 
 ### 1:30-2:20 Arize / Phoenix Loop
 
-Run the improved agent. Show the baseline-to-improved delta panel, Phoenix/OpenTelemetry status, Phoenix MCP status, and evals. Explain that this is an eval-guided improvement replay: Phoenix/OTEL and MCP expose run state, code evals measure grounding, severity, and report quality, and the improved run demonstrates the specific checklist changes that would be promoted into the agent logic. It is not claiming autonomous production self-modification. If the hosted runtime shows MCP `ok`, call out the discovered Phoenix tools and the read-only `list-projects` / `list-traces` query result; if not, call out the exact skipped/error reason shown in the UI.
+Run the improved agent. Show the baseline-to-improved delta panel, Phoenix/OpenTelemetry status, Phoenix MCP status, evals, and the improvement receipt. Explain that Phoenix/OTEL and MCP expose run state, code evals measure grounding, severity, and report quality, and the improvement planner turns the weakest eval plus MCP read-query receipts into a concrete next-run change. It is not claiming autonomous production self-modification. If the hosted runtime shows MCP `ok`, call out the discovered Phoenix tools, the read-only `list-projects` / `list-traces` query result, and the `observability_derived` plan status; if not, call out the exact skipped/error reason shown in the UI.
 
 ### Agent Builder / ADK proof point
 

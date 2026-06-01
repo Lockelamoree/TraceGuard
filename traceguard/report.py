@@ -9,6 +9,7 @@ def render_markdown_report(
     evals: list[EvalResult],
     gemini_brief: str = "",
     metrics: dict[str, object] | None = None,
+    improvement: dict[str, object] | None = None,
 ) -> str:
     evidence_by_id = {item.id: item for item in evidence}
     lines = [
@@ -31,6 +32,29 @@ def render_markdown_report(
                 f"- Eval average: {metrics.get('eval_average', 'n/a')}",
                 f"- Unsupported confirmed claims: {metrics.get('unsupported_confirmed_claims', 'n/a')}",
                 f"- Gemini validation: {metrics.get('gemini_validation_status', 'not_run')}",
+                f"- Improvement status: {metrics.get('improvement_status', 'n/a')}",
+                "",
+            ]
+        )
+    if improvement:
+        receipts = improvement.get("receipts", ())
+        if isinstance(receipts, list):
+            receipt_text = ", ".join(str(item) for item in receipts)
+        elif isinstance(receipts, tuple):
+            receipt_text = ", ".join(str(item) for item in receipts)
+        else:
+            receipt_text = str(receipts)
+        lines.extend(
+            [
+                "## Observability Improvement Plan",
+                f"- Status: {improvement.get('status', 'unknown')}",
+                f"- Source: {improvement.get('source', 'unknown')}",
+                f"- Observation: {improvement.get('observation', '')}",
+                f"- Eval signal: {improvement.get('eval_signal', '')}",
+                f"- MCP signal: {improvement.get('mcp_signal', '')}",
+                f"- Recommendation: {improvement.get('recommendation', '')}",
+                f"- Next-run change: {improvement.get('next_run_change', '')}",
+                f"- Receipts: {receipt_text}",
                 "",
             ]
         )

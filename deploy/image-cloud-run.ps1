@@ -12,7 +12,7 @@ param(
   [string]$PhoenixCollectorEndpoint = "",
   [string]$PhoenixMcpCommand = "phoenix-mcp",
   [int]$PhoenixMcpTimeoutSeconds = 12,
-  [string]$GeminiModel = "gemini-2.5-flash",
+  [string]$GeminiModel = "gemini-3-flash-preview",
   [string]$Repository = "cloud-run-source-deploy",
   [int]$MaxInstances = 2,
   [int]$AuthSessionSeconds = 43200,
@@ -29,6 +29,13 @@ $runtimeServiceAccount = "$RuntimeServiceAccountName@$ProjectId.iam.gserviceacco
 $image = "$Region-docker.pkg.dev/$ProjectId/$Repository/$ServiceName`:latest"
 
 Set-Location $repo
+
+try {
+  $SourceCommit = (& git rev-parse HEAD).Trim()
+}
+catch {
+  $SourceCommit = ""
+}
 
 function Assert-LastCommand($Action) {
   if ($LASTEXITCODE -ne 0) {
@@ -138,6 +145,10 @@ $envVars = @(
   "TRACEGUARD_REQUIRE_AUTH=true",
   "TRACEGUARD_AUTH_SESSION_SECONDS=$AuthSessionSeconds"
 )
+
+if ($SourceCommit) {
+  $envVars += "TRACEGUARD_SOURCE_COMMIT=$SourceCommit"
+}
 
 if ($PhoenixMcpCommand) {
   $envVars += "PHOENIX_MCP_COMMAND=$PhoenixMcpCommand"
