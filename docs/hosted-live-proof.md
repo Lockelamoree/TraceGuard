@@ -9,8 +9,8 @@ This is the sanitized proof bundle from the deployed Cloud Run build. It is mean
 - Cloud Run service: `traceguard`
 - Region: `us-central1`
 - Public URL: `https://traceguard-cnhtsa5yrq-uc.a.run.app`
-- Latest verified ready revision: `traceguard-00029-ngc`
-- Latest verified source commit: `1a5ebd4a331d1f50a642b6e45a121a8bbd4ba0f7`
+- Latest verified ready revision: `traceguard-00030-9jx`
+- Latest verified source commit: `0a7e5a75256291162dcc5945427960a53c19ad54`
 - Latest ready revision: exposed in `/proof` as `deployment.cloud_run_revision`
 - Source commit: exposed in `/proof` as `deployment.source_commit`
 - Traffic: `100%` to the latest ready revision
@@ -33,6 +33,10 @@ This is the sanitized proof bundle from the deployed Cloud Run build. It is mean
 ```
 
 The hosted app is reachable, and `/proof` exposes only non-secret judge receipts. The judging deployment is public so reviewers can choose a bundled sample or load a redacted custom text sample and run the agent without an access key. Private deployments can still enable the signed-session gate with `TRACEGUARD_REQUIRE_AUTH=true`.
+
+## Judge Receipt Behavior
+
+The compact `Judge receipt` popover is not a static claim. It starts with pending labels, fetches `/proof` with `cache: no-store`, and fills the evidence, grounding, and Phoenix status tiles from the sanitized `latest_run` receipt. When a reviewer runs the agent, the same tiles update from that run's returned metrics. The hosted HTML was checked to confirm it no longer hardcodes `94% eval avg` or `0 unsupported claims`; those values appear only when the runtime receipt or current run supports them.
 
 ## Custom Sample Upload Safety
 

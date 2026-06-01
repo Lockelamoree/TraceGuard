@@ -88,6 +88,7 @@ More detail lives in `PROJECT_VISUALIZATION.md`.
 - Runs evals for evidence grounding, confirmed-claim hygiene, detection usefulness, remediation usefulness, severity calibration, and duplicate pressure.
 - Converts the weakest eval plus Phoenix MCP read-query receipt into a concrete next-run improvement plan.
 - Shows a proof scoreboard so reviewers can see the run metrics without reading the whole report: unsupported confirmed claims, eval average, runtime duration, Gemini validation, MCP status, and critical/high count.
+- Populates the compact judge-context receipt from `/proof` or the current run result, so the `0 unsupported claims` and eval-average values are evidence-backed runtime receipts rather than hardcoded UI text.
 - Shows the Arize loop as `Observe -> Evaluate -> Improve`: TraceGuard runs the evals, Phoenix/OpenTelemetry observes the run, Phoenix MCP provides read-only trace/project receipts, and the app turns that into a specific next-run change.
 - Renders the final report in-app and keeps a clipboard export for handoff.
 

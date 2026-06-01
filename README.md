@@ -34,7 +34,7 @@ Hosted Gemini 3 proof crops from the deployed Cloud Run build:
 
 ![TraceGuard hosted Gemini 3 report evidence](docs/screenshots/traceguard-hosted-gemini3-report-evidence.png)
 
-Sanitized live deployment proof is captured in [docs/hosted-live-proof.md](docs/hosted-live-proof.md). The hosted app also exposes a public, non-secret `/proof` JSON receipt for automated checks, including a sanitized `latest_run` receipt with Gemini validation, Phoenix MCP status, eval average, and unsupported-claim count.
+Sanitized live deployment proof is captured in [docs/hosted-live-proof.md](docs/hosted-live-proof.md). The hosted app also exposes a public, non-secret `/proof` JSON receipt for automated checks, including a sanitized `latest_run` receipt with Gemini validation, Phoenix MCP status, eval average, and unsupported-claim count. The compact judge-context receipt in the UI starts neutral and is populated from `/proof` or the current run result, so those values are runtime evidence, not hardcoded copy.
 
 Hosted liveness uses `/health` or `/api/auth/status`. The container also exposes `/healthz`, but Google Cloud Run reserves some public URL paths ending in `z`, so the exact hosted `/healthz` path can return a Google Frontend 404 before the request reaches TraceGuard.
 
@@ -114,7 +114,7 @@ Expected sample result:
 - Improved: 11 findings, including 8 critical/high priority issues.
 - Improved-only coverage: `repo-control-gap`.
 - Severity change: public access findings move from high to critical.
-- Proof scoreboard: 0 unsupported confirmed claims and about 94% eval average on the included sample bundle.
+- Proof scoreboard: 0 unsupported confirmed claims and about 94% eval average on the included sample bundle, calculated from TraceGuard's deterministic quality evals.
 - Improvement plan: local runs use code eval receipts to recommend the next checklist/reporting change; hosted runs can show `observability_derived` when Phoenix MCP read queries complete.
 - Local runtime status: Gemini is disabled unless Google Cloud env vars are set; Phoenix/MCP show local replay unless Phoenix env vars are set.
 
