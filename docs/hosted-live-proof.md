@@ -9,8 +9,8 @@ This is the sanitized proof bundle from the deployed Cloud Run build. It is mean
 - Cloud Run service: `traceguard`
 - Region: `us-central1`
 - Public URL: `https://traceguard-cnhtsa5yrq-uc.a.run.app`
-- Latest ready revision: `traceguard-00026-sbq`, exposed in `/proof` as `deployment.cloud_run_revision`
-- Source commit: `a94b761d2278fcf9751aef5b9a5788188d6586dd`
+- Latest ready revision: exposed in `/proof` as `deployment.cloud_run_revision`
+- Source commit: exposed in `/proof` as `deployment.source_commit`
 - Traffic: `100%` to the latest ready revision
 
 ## Public Liveness
@@ -34,13 +34,13 @@ The hosted app is reachable, and `/proof` exposes only non-secret judge receipts
 
 ## Hosted Sample Run
 
-This run used the hosted sample workflow. The live `/proof` endpoint now includes this same shape under `latest_run`, with the current Cloud Run revision and pushed source commit filled in at runtime.
+This run used the hosted sample workflow. The live `/proof` endpoint includes this same shape under `latest_run`, with the current Cloud Run revision and pushed source commit filled in at runtime. If a new instance starts before a fresh run, the packaged fallback receipt is still stamped with the current runtime metadata before it is returned.
 
 ```json
 {
   "source": "runtime_public_run",
-  "cloud_run_revision": "traceguard-00026-sbq",
-  "source_commit": "a94b761d2278fcf9751aef5b9a5788188d6586dd",
+  "cloud_run_revision": "<filled by /proof at runtime>",
+  "source_commit": "<filled by /proof at runtime>",
   "evidence_items": 10,
   "findings": 11,
   "critical_or_high": 8,
