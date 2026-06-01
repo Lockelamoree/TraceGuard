@@ -12,8 +12,8 @@
       <form id="authForm" class="auth-panel" aria-describedby="authHint">
         <p class="eyebrow">TraceGuard production access</p>
         <h1>TraceGuard access</h1>
-        <p id="authHint" class="auth-hint">Use the temporary judge key from the private Devpost field. The key is never shown in the UI.</p>
-        <label for="authToken">Judge access key</label>
+        <p id="authHint" class="auth-hint">Use the private access key for protected deployments. The key is never shown in the UI.</p>
+        <label for="authToken">Access key</label>
         <input id="authToken" name="authToken" type="password" autocomplete="off" required />
         <button class="primary" type="submit">Unlock</button>
         <div id="authMessage" class="auth-message" role="status"></div>
@@ -101,6 +101,10 @@
             <div class="panel-header">
               <h2>Evidence Bundle</h2>
               <div class="actions">
+                <label class="visually-hidden" for="sampleSelect">Sample data</label>
+                <select id="sampleSelect" class="sample-select" aria-label="Sample data">
+                  <option value="incident-response">Incident response bundle</option>
+                </select>
                 <button id="loadSample" type="button">Load sample</button>
                 <button id="runImproved" class="primary" type="button">Run agent</button>
                 <button id="runBaseline" class="quiet" type="button">Run baseline</button>

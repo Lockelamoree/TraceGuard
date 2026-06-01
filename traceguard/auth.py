@@ -21,7 +21,7 @@ class AuthConfig:
 
     @property
     def enabled(self) -> bool:
-        return bool(self.token) or self.require_token
+        return self.require_token
 
     @property
     def ready(self) -> bool:

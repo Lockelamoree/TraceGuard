@@ -16,6 +16,7 @@ param(
   [string]$Repository = "cloud-run-source-deploy",
   [int]$MaxInstances = 2,
   [int]$AuthSessionSeconds = 43200,
+  [switch]$RequireAuth,
   [int]$LocalVerifyPort = 18080,
   [switch]$SkipLocalVerify
 )
@@ -111,13 +112,16 @@ if (-not $existingServiceAccount) {
   --role "roles/secretmanager.secretAccessor" `
   --quiet
 
-& $dockerGcloud secrets add-iam-policy-binding $AuthSecretName `
-  --project $ProjectId `
-  --member "serviceAccount:$runtimeServiceAccount" `
-  --role "roles/secretmanager.secretAccessor" `
-  --quiet
+if ($RequireAuth) {
+  & $dockerGcloud secrets add-iam-policy-binding $AuthSecretName `
+    --project $ProjectId `
+    --member "serviceAccount:$runtimeServiceAccount" `
+    --role "roles/secretmanager.secretAccessor" `
+    --quiet
+}
 
 $PhoenixCollectorEndpoint = Resolve-PhoenixCollectorEndpoint $PhoenixCollectorEndpoint
+$requireAuthValue = if ($RequireAuth) { "true" } else { "false" }
 
 $token = & $dockerGcloud auth print-access-token
 if (-not $token) {
@@ -142,7 +146,7 @@ $envVars = @(
   "PHOENIX_MCP_SERVER=@arizeai/phoenix-mcp",
   "PHOENIX_COLLECTOR_ENDPOINT=$PhoenixCollectorEndpoint",
   "PHOENIX_MCP_TIMEOUT_SECONDS=$PhoenixMcpTimeoutSeconds",
-  "TRACEGUARD_REQUIRE_AUTH=true",
+  "TRACEGUARD_REQUIRE_AUTH=$requireAuthValue",
   "TRACEGUARD_AUTH_SESSION_SECONDS=$AuthSessionSeconds"
 )
 
@@ -155,9 +159,12 @@ if ($PhoenixMcpCommand) {
 }
 
 $secretBindings = @(
-  "PHOENIX_API_KEY=$PhoenixSecretName`:latest",
-  "TRACEGUARD_AUTH_TOKEN=$AuthSecretName`:latest"
+  "PHOENIX_API_KEY=$PhoenixSecretName`:latest"
 )
+
+if ($RequireAuth) {
+  $secretBindings += "TRACEGUARD_AUTH_TOKEN=$AuthSecretName`:latest"
+}
 
 & $dockerGcloud run deploy $ServiceName `
   --project $ProjectId `

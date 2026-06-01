@@ -22,6 +22,7 @@ const authToken = document.querySelector("#authToken");
 const authMessage = document.querySelector("#authMessage");
 const logoutButton = document.querySelector("#logoutButton");
 const evidenceStats = document.querySelector("#evidenceStats");
+const sampleSelect = document.querySelector("#sampleSelect");
 let lastReport = "";
 const INITIAL_SUMMARY = "Load the sample bundle, then compare baseline and improved triage.";
 const INITIAL_RUNTIME_DETAIL = "Runtime detail appears after a run. Local mode uses deterministic triage without claiming live Gemini or Phoenix telemetry.";
@@ -31,7 +32,7 @@ const runState = {
   baseline: null,
   improved: null,
 };
-const actionButtons = ["#loadSample", "#runBaseline", "#runImproved"]
+const actionButtons = ["#sampleSelect", "#loadSample", "#runBaseline", "#runImproved"]
   .map((selector) => document.querySelector(selector));
 
 renderDelta();
@@ -43,12 +44,15 @@ initialize();
 
 document.querySelector("#loadSample").addEventListener("click", async () => {
   setBusy(true);
+  const selectedOption = sampleSelect.options[sampleSelect.selectedIndex];
+  const sampleLabel = selectedOption?.textContent || "sample";
   try {
-    const response = await fetchWithAuth("/sample");
+    const bundle = encodeURIComponent(sampleSelect.value || "incident-response");
+    const response = await fetchWithAuth(`/sample?bundle=${bundle}`);
     if (!response) return;
     evidence.value = await response.text();
     resetRunState();
-    summary.textContent = "Sample loaded. Run the improved agent to capture the baseline and improved delta.";
+    summary.textContent = `${sampleLabel} loaded. Run the improved agent to capture the baseline and improved delta.`;
   } catch {
     summary.textContent = "Sample load failed. Check the local server or hosted session and try again.";
   } finally {
@@ -112,6 +116,7 @@ async function initialize() {
       return;
     }
     showApp(status.enabled);
+    await loadSampleOptions();
     await loadRuntimeStatus();
   } catch {
     showApp(false);
@@ -142,6 +147,7 @@ async function login(event) {
   authToken.value = "";
   authMessage.textContent = "";
   showApp(result.enabled);
+  await loadSampleOptions();
   await loadRuntimeStatus();
   window.setTimeout(() => evidence.focus(), 0);
 }
@@ -207,9 +213,9 @@ async function loadRuntimeStatus() {
     const geminiState = status.enable_gemini_synthesis && status.google_cloud_project ? "Gemini configured" : "Gemini local deterministic";
     const phoenixState = status.phoenix_api_key_configured || status.phoenix_collector_endpoint ? "Phoenix configured" : "Phoenix local trace context";
     const mcpState = status.phoenix_mcp_command_configured ? "MCP command ready" : "MCP command unset";
-    const authState = status.traceguard_auth_configured ? "Auth on" : "Auth local-off";
+    const authState = status.traceguard_auth_required ? "Access key on" : "Public judge access";
     setRuntimeStatus([
-      { label: authState, tone: status.traceguard_auth_configured ? "good" : "info" },
+      { label: authState, tone: status.traceguard_auth_required ? "good" : "info" },
       { label: geminiState, tone: status.enable_gemini_synthesis && status.google_cloud_project ? "info" : "neutral" },
       { label: phoenixState, tone: status.phoenix_api_key_configured || status.phoenix_collector_endpoint ? "info" : "neutral" },
       { label: mcpState, tone: status.phoenix_mcp_command_configured ? "info" : "neutral" },
@@ -228,6 +234,28 @@ async function loadRuntimeStatus() {
   } catch {
     runtimeStatus.textContent = "Runtime status unavailable";
     runtimeDetail.textContent = "Runtime status unavailable. Local deterministic analysis may still work if the API is reachable.";
+  }
+}
+
+async function loadSampleOptions() {
+  if (!sampleSelect) return;
+  try {
+    const response = await fetchWithAuth("/api/samples");
+    if (!response || !response.ok) return;
+    const payload = await response.json();
+    if (!Array.isArray(payload.samples) || !payload.samples.length) return;
+    const currentValue = sampleSelect.value;
+    sampleSelect.innerHTML = payload.samples.map((sample) => {
+      const id = escapeHtml(sample.id || "");
+      const label = escapeHtml(sample.label || sample.id || "Sample bundle");
+      const description = escapeHtml(sample.description || "");
+      return `<option value="${id}" title="${description}">${label}</option>`;
+    }).join("");
+    if (payload.samples.some((sample) => sample.id === currentValue)) {
+      sampleSelect.value = currentValue;
+    }
+  } catch {
+    summary.textContent = "Sample list unavailable. The default sample can still be loaded.";
   }
 }
 

@@ -16,14 +16,12 @@ Public proof endpoint: https://traceguard-cnhtsa5yrq-uc.a.run.app/proof
 
 Hosted live proof: `docs/hosted-live-proof.md`
 
-Demo video shotlist: `docs/demo-video-shotlist.md`
-
-Judge access: if the hosted app asks for an access key, use the temporary judge key provided in the Devpost submission field. The local demo needs no cloud credentials and still shows deterministic triage, baseline/improved comparison, evals, improvement planning, and report export.
+Judge access: the hosted app is public for review and no access key is required. The local run still needs no cloud credentials and shows deterministic triage, sample selection, baseline/improved comparison, evals, improvement planning, and report export.
 
 ## Judge Quickstart
 
 1. Open the hosted URL or run locally.
-2. Unlock with the Devpost judge key if prompted.
+2. Choose a sample bundle.
 3. Click `Load sample`.
 4. Click `Run agent`.
 5. Confirm the baseline/improved delta:
@@ -71,7 +69,7 @@ More detail lives in `PROJECT_VISUALIZATION.md`.
 
 ## Claims Matrix
 
-| Area | Confirmed local | Confirmed hosted after judge login | Optional/live-only |
+| Area | Confirmed local | Confirmed hosted public run | Optional/live-only |
 | --- | --- | --- | --- |
 | Deterministic triage | Yes | Yes | No |
 | Baseline/improved delta | Yes | Yes | No |
@@ -88,7 +86,7 @@ More detail lives in `PROJECT_VISUALIZATION.md`.
 - Shows a baseline run and an improved run so the delta is visible.
 - Runs evals for evidence grounding, confirmed-claim hygiene, detection usefulness, remediation usefulness, severity calibration, and duplicate pressure.
 - Converts the weakest eval plus Phoenix MCP read-query receipt into a concrete next-run improvement plan.
-- Shows a proof scoreboard so the judge can see the run metrics without reading the whole report: unsupported confirmed claims, eval average, runtime duration, Gemini validation, MCP status, and critical/high count.
+- Shows a proof scoreboard so reviewers can see the run metrics without reading the whole report: unsupported confirmed claims, eval average, runtime duration, Gemini validation, MCP status, and critical/high count.
 - Shows the Arize loop as `Observe -> Evaluate -> Improve`, tying Phoenix trace/MCP proof to eval quality and a specific next-run change.
 - Renders the final report in-app and keeps a clipboard export for handoff.
 
@@ -100,7 +98,7 @@ More detail lives in `PROJECT_VISUALIZATION.md`.
 - Agent surface: ADK-compatible `root_agent` in `traceguard/adk_agent.py`.
 - Arize: Phoenix Cloud, Phoenix OTEL instrumentation, a stdio Phoenix MCP client that performs read-only `initialize`, `tools/list`, `list-projects`, and `list-traces` when configured and supported by the server, plus an improvement planner that cites those receipts.
 - Python standard library for the local backend.
-- HTML, CSS, and JavaScript for the judge-facing web app.
+- HTML, CSS, and JavaScript for the review-facing web app.
 
 ## Arize Integration Story
 
@@ -132,11 +130,11 @@ For hosted deployment, configure:
 
 The production image preinstalls `@arizeai/phoenix-mcp@4.0.13`; local experiments can still use `npx -y @arizeai/phoenix-mcp@4.0.13`.
 
-`PHOENIX_API_KEY` is mounted from Google Secret Manager in Cloud Run. The production image includes Node/npm for the pinned Phoenix MCP command, runs as a non-root user, and exposes `/healthz` for local/container checks plus `/health` for the hosted Cloud Run URL. Google documents some Cloud Run paths ending in `z` as reserved, so the public demo uses `/health` and `/api/auth/status` for external liveness. The app returns runtime status without exposing secret values or command-line values.
+`PHOENIX_API_KEY` is mounted from Google Secret Manager in Cloud Run. The production image includes Node/npm for the pinned Phoenix MCP command, runs as a non-root user, and exposes `/healthz` for local/container checks plus `/health` for the hosted Cloud Run URL. Google documents some Cloud Run paths ending in `z` as reserved, so the public hosted app uses `/health` and `/api/auth/status` for external liveness. The app returns runtime status without exposing secret values or command-line values.
 
-## Demo Video Script
+## Demo Video Outline
 
-The final Devpost video should follow the shotlist in `docs/demo-video-shotlist.md` and stay under three minutes.
+The final Devpost video should stay under three minutes.
 
 ### 0:00-0:20 Problem
 
@@ -152,7 +150,7 @@ Run the improved agent. Show the baseline-to-improved delta panel, Phoenix/OpenT
 
 ### Agent Builder / ADK proof point
 
-Open `traceguard/adk_agent.py` in the repo. `root_agent` is the Google ADK agent surface for Agent Builder / Agent Platform orchestration. It uses Gemini and is instructed to call `triage_evidence_tool` before making claims. The hosted Cloud Run UI is the judge-friendly runtime over the same deterministic parser/scoring/eval pipeline.
+Open `traceguard/adk_agent.py` in the repo. `root_agent` is the Google ADK agent surface for Agent Builder / Agent Platform orchestration. It uses Gemini and is instructed to call `triage_evidence_tool` before making claims. The hosted Cloud Run UI is the review-friendly runtime over the same deterministic parser/scoring/eval pipeline.
 
 ### 2:20-2:50 Final Report
 

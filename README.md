@@ -20,7 +20,7 @@ Public proof endpoint: https://traceguard-cnhtsa5yrq-uc.a.run.app/proof
 
 ## Proof Snapshot
 
-The UI makes the evidence boundary visible without asking anyone to trust a black box. Local mode stays deterministic and labels Gemini or Phoenix as disabled/replay unless those integrations are actually configured. The hosted Cloud Run build shows live runtime receipts for Gemini, Phoenix OTEL, Phoenix MCP, eval quality, and unsupported confirmed claims.
+The UI makes the evidence boundary visible without asking anyone to trust a black box. Local mode stays deterministic and labels Gemini or Phoenix as disabled/replay unless those integrations are actually configured. The hosted Cloud Run build is public for judging and shows live runtime receipts for Gemini, Phoenix OTEL, Phoenix MCP, eval quality, and unsupported confirmed claims.
 
 ![TraceGuard hosted Gemini 3 workbench](docs/screenshots/traceguard-hosted-gemini3-workbench.png)
 
@@ -73,8 +73,8 @@ I keep the full map in [PROJECT_VISUALIZATION.md](PROJECT_VISUALIZATION.md), inc
 
 | Claim | Local deterministic run | Hosted production path | Notes |
 | --- | --- | --- | --- |
-| Evidence parsing and deterministic findings | Confirmed | Confirmed after authenticated run | No cloud credentials required locally. |
-| Baseline vs improved delta | Confirmed | Confirmed after authenticated run | This build uses deterministic eval-guided replay, not autonomous online learning. |
+| Evidence parsing and deterministic findings | Confirmed | Confirmed after hosted public run | No cloud credentials required locally. |
+| Baseline vs improved delta | Confirmed | Confirmed after hosted public run | This build uses deterministic eval-guided replay, not autonomous online learning. |
 | Observability improvement plan | Eval-guided local plan | `observability_derived` when Phoenix MCP read queries complete | The plan cites eval and MCP receipts, then proposes the next run change. It does not self-modify production code. |
 | Gemini synthesis | Disabled by default | Requires `GOOGLE_CLOUD_PROJECT` and `ENABLE_GEMINI_SYNTHESIS=true` | Gemini summarizes deterministic findings; it does not create security facts. |
 | Phoenix OTEL tracing | Local replay by default | Requires `PHOENIX_API_KEY` or `PHOENIX_COLLECTOR_ENDPOINT` | Runtime badges distinguish live tracing from replay. |
@@ -104,7 +104,7 @@ On Windows, if `python` is not on PATH but the Python launcher is installed:
 py -3.11 -m traceguard.server --host 127.0.0.1 --port 8000
 ```
 
-Open `http://127.0.0.1:8000`, load the sample bundle, and run both `Baseline` and `Run agent`.
+Open `http://127.0.0.1:8000`, choose a sample bundle, and run both `Baseline` and `Run agent`.
 
 Expected sample result:
 
@@ -151,18 +151,17 @@ Production environment variables:
 - `PHOENIX_MCP_SERVER`: MCP server command/name, defaults to `@arizeai/phoenix-mcp`.
 - `PHOENIX_MCP_COMMAND`: Optional stdio command used for live read-only MCP introspection. The production image preinstalls `@arizeai/phoenix-mcp@4.0.13`, so `phoenix-mcp` is the preferred Cloud Run value.
 - `PHOENIX_MCP_TIMEOUT_SECONDS`: Timeout for MCP initialize, tool discovery, and read-only trace/project queries, defaults to 4 seconds locally and 12 seconds in deploy scripts.
-- `TRACEGUARD_AUTH_TOKEN`: Shared access key required before sample data, runtime config, or agent runs are available. Store this in Secret Manager.
-- `TRACEGUARD_REQUIRE_AUTH`: Fail-closed auth guard. Production deploy scripts set this to `true`, so protected routes stay locked if the access key secret is ever missing.
+- `TRACEGUARD_REQUIRE_AUTH`: Optional fail-closed auth guard. The public judging deploy leaves this unset/false so reviewers can open the app without an access key.
+- `TRACEGUARD_AUTH_TOKEN`: Optional shared access key used only when `TRACEGUARD_REQUIRE_AUTH=true`. Store it in Secret Manager for protected deployments.
 - `TRACEGUARD_AUTH_SESSION_SECONDS`: Signed browser session lifetime, defaults to 12 hours.
 
-Create the production secrets:
+Create the production Phoenix secret:
 
 ```powershell
 gcloud secrets create traceguard-phoenix-api-key --data-file=-
-gcloud secrets create traceguard-auth-token --data-file=-
 ```
 
-If you use the Dockerized gcloud helper, generate and upload a random TraceGuard access key:
+For a private deployment, generate and upload a random TraceGuard access key, then deploy with `-RequireAuth`:
 
 ```powershell
 powershell.exe -ExecutionPolicy Bypass -File .\deploy\set-auth-secret.ps1 `
@@ -179,7 +178,7 @@ powershell.exe -ExecutionPolicy Bypass -File .\deploy\image-cloud-run.ps1 `
   -PhoenixCollectorEndpoint "https://app.phoenix.arize.com/s/your-space-name"
 ```
 
-Both `deploy\cloud-run.ps1` and `deploy\image-cloud-run.ps1` run `deploy\local-verify.ps1` before touching Cloud Run. The gate builds the container locally, runs the test suite inside that image, starts it on `127.0.0.1` with auth required, checks `/health`, confirms the proof UI/JS markers are present, logs in with a local verification token, and posts the sample bundle to `/api/analyze`. Production deploy stops if any of those checks fail.
+Both `deploy\cloud-run.ps1` and `deploy\image-cloud-run.ps1` run `deploy\local-verify.ps1` before touching Cloud Run. The gate builds the container locally, runs the test suite inside that image, starts it on `127.0.0.1` with auth required, checks `/health`, confirms the proof UI/JS markers are present, logs in with a local verification token, and posts the sample bundle to `/api/analyze`. Production deploy stops if any of those checks fail. The hosted judging deploy itself is public unless `-RequireAuth` is passed.
 
 The production deploy scripts also preserve an existing Cloud Run `PHOENIX_COLLECTOR_ENDPOINT` when the flag is omitted, reject the generic `https://app.phoenix.arize.com` root endpoint, and require a Phoenix space-specific URL such as `https://app.phoenix.arize.com/s/your-space-name` for new production deploys.
 
@@ -195,9 +194,9 @@ For lower-level gcloud commands through Docker:
 powershell.exe -ExecutionPolicy Bypass -File .\deploy\docker-gcloud.ps1 auth login --no-launch-browser
 ```
 
-The deploy script enables required APIs, creates a least-privilege runtime service account, grants Vertex AI access, grants Secret Manager access only to the Phoenix and TraceGuard auth secrets, and deploys Cloud Run with `PHOENIX_API_KEY` mounted from Secret Manager.
+The deploy script enables required APIs, creates a least-privilege runtime service account, grants Vertex AI access, grants Secret Manager access to the Phoenix secret, and deploys Cloud Run with `PHOENIX_API_KEY` mounted from Secret Manager.
 
-It also mounts `TRACEGUARD_AUTH_TOKEN` from Secret Manager. Cloud Run remains unauthenticated at the platform layer so reviewers can reach the URL, but TraceGuard requires the access key before running the agent or reading sample evidence.
+When `-RequireAuth` is passed, it also mounts `TRACEGUARD_AUTH_TOKEN` from Secret Manager and requires a signed browser session before sample data, runtime config, or agent runs are available.
 
 ## Arize / Phoenix Integration Notes
 
@@ -251,12 +250,14 @@ That gives two entry points over the same core agent logic: Cloud Run for the ho
 - `traceguard/server.py`: Dependency-free web server.
 - `web/`: Browser UI.
 - `samples/gcp_incident_bundle.txt`: Safe synthetic incident scenario.
+- `samples/gcp_storage_exfil_bundle.txt`: Storage-exfiltration scenario.
+- `samples/gcp_low_signal_control_bundle.txt`: Low-signal control scenario.
 - `tests/`: Unit and scenario tests.
 
 ## Safety Model
 
 TraceGuard does not claim exploitation or compromise without evidence. Findings are marked confirmed only when backed by parsed evidence IDs. Empty or malformed evidence returns inconclusive results, not a fake clean bill of health.
 
-The hosted app has an app-level auth gate. When `TRACEGUARD_AUTH_TOKEN` is configured, the server denies `/sample`, `/api/runtime`, and `/api/analyze` until the browser presents a signed HttpOnly session cookie. The login screen is convenience; the backend check is the actual control.
+The hosted judging app is public so reviewers can run it without an access key. For private deployments, set `TRACEGUARD_REQUIRE_AUTH=true` and configure `TRACEGUARD_AUTH_TOKEN`; then the server denies `/sample`, `/api/runtime`, and `/api/analyze` until the browser presents a signed HttpOnly session cookie. The login screen is convenience; the backend check is the actual control.
 
-Repeated bad access-key attempts receive `429` responses, and authenticated `/api/analyze` requests reject cross-origin `Origin` / `Referer` values. For a long-lived production service, I would put Cloud Run behind IAM, IAP, or Cloud Armor instead of relying only on a shared access key.
+Repeated bad access-key attempts receive `429` responses when auth is enabled, and `/api/analyze` requests reject cross-origin `Origin` / `Referer` values. For a long-lived production service, I would put Cloud Run behind IAM, IAP, or Cloud Armor instead of relying only on a shared access key.

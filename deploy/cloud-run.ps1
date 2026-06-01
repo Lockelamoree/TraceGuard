@@ -14,6 +14,7 @@ param(
   [int]$PhoenixMcpTimeoutSeconds = 12,
   [string]$GeminiModel = "gemini-3-flash-preview",
   [int]$AuthSessionSeconds = 43200,
+  [switch]$RequireAuth,
   [int]$LocalVerifyPort = 18080,
   [switch]$SkipLocalVerify
 )
@@ -119,13 +120,15 @@ if (-not $existingSecret) {
   throw "Missing Secret Manager secret: $PhoenixSecretName"
 }
 
-$existingAuthSecret = Invoke-Gcloud secrets list `
-  --filter "name:$AuthSecretName" `
-  --format "value(name)"
-if (-not $existingAuthSecret) {
-  Write-Host "Create the TraceGuard auth secret before deploying:"
-  Write-Host "  .\deploy\set-auth-secret.ps1 -ProjectId $ProjectId -Generate"
-  throw "Missing Secret Manager secret: $AuthSecretName"
+if ($RequireAuth) {
+  $existingAuthSecret = Invoke-Gcloud secrets list `
+    --filter "name:$AuthSecretName" `
+    --format "value(name)"
+  if (-not $existingAuthSecret) {
+    Write-Host "Create the TraceGuard auth secret before deploying:"
+    Write-Host "  .\deploy\set-auth-secret.ps1 -ProjectId $ProjectId -Generate"
+    throw "Missing Secret Manager secret: $AuthSecretName"
+  }
 }
 
 Invoke-Gcloud secrets add-iam-policy-binding $PhoenixSecretName `
@@ -133,12 +136,15 @@ Invoke-Gcloud secrets add-iam-policy-binding $PhoenixSecretName `
   --role "roles/secretmanager.secretAccessor" `
   --quiet
 
-Invoke-Gcloud secrets add-iam-policy-binding $AuthSecretName `
-  --member "serviceAccount:$runtimeServiceAccount" `
-  --role "roles/secretmanager.secretAccessor" `
-  --quiet
+if ($RequireAuth) {
+  Invoke-Gcloud secrets add-iam-policy-binding $AuthSecretName `
+    --member "serviceAccount:$runtimeServiceAccount" `
+    --role "roles/secretmanager.secretAccessor" `
+    --quiet
+}
 
 $PhoenixCollectorEndpoint = Resolve-PhoenixCollectorEndpoint $PhoenixCollectorEndpoint
+$requireAuthValue = if ($RequireAuth) { "true" } else { "false" }
 
 $envVars = @(
   "GOOGLE_CLOUD_PROJECT=$ProjectId",
@@ -151,7 +157,7 @@ $envVars = @(
   "PHOENIX_MCP_SERVER=@arizeai/phoenix-mcp",
   "PHOENIX_COLLECTOR_ENDPOINT=$PhoenixCollectorEndpoint",
   "PHOENIX_MCP_TIMEOUT_SECONDS=$PhoenixMcpTimeoutSeconds",
-  "TRACEGUARD_REQUIRE_AUTH=true",
+  "TRACEGUARD_REQUIRE_AUTH=$requireAuthValue",
   "TRACEGUARD_AUTH_SESSION_SECONDS=$AuthSessionSeconds"
 )
 
@@ -163,11 +169,19 @@ if ($PhoenixMcpCommand) {
   $envVars += "PHOENIX_MCP_COMMAND=$PhoenixMcpCommand"
 }
 
+$secretBindings = @(
+  "PHOENIX_API_KEY=$PhoenixSecretName`:latest"
+)
+
+if ($RequireAuth) {
+  $secretBindings += "TRACEGUARD_AUTH_TOKEN=$AuthSecretName`:latest"
+}
+
 Invoke-Gcloud run deploy $ServiceName `
   --source . `
   --region $Region `
   --service-account $runtimeServiceAccount `
   --allow-unauthenticated `
   --set-env-vars ($envVars -join ",") `
-  --set-secrets "PHOENIX_API_KEY=$PhoenixSecretName`:latest,TRACEGUARD_AUTH_TOKEN=$AuthSecretName`:latest" `
+  --set-secrets ($secretBindings -join ",") `
   --quiet

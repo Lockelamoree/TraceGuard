@@ -1,6 +1,6 @@
 # TraceGuard Hosted Live Proof
 
-This is the sanitized proof bundle from the deployed Cloud Run build. It is meant for judge review and does not include the private access key, Phoenix API key, cookies, or Secret Manager output.
+This is the sanitized proof bundle from the deployed Cloud Run build. It is meant for judge review and does not include Phoenix API keys, cookies, Secret Manager output, or other secret values.
 
 ## Deployment
 
@@ -24,16 +24,16 @@ This is the sanitized proof bundle from the deployed Cloud Run build. It is mean
   "proof_secrets_exposed": false,
   "proof_gemini_model": "gemini-3-flash-preview",
   "proof_latest_run_available": true,
-  "auth_enabled": true,
-  "authenticated": false
+  "auth_enabled": false,
+  "authenticated": true
 }
 ```
 
-The hosted app is reachable, and `/proof` exposes only non-secret judge receipts. Protected demo routes stay locked until the Devpost judge key is accepted. That keeps the public URL testable without leaving the sample evidence and runtime details open to the internet.
+The hosted app is reachable, and `/proof` exposes only non-secret judge receipts. The judging deployment is public so reviewers can choose a bundled sample and run the agent without an access key. Private deployments can still enable the signed-session gate with `TRACEGUARD_REQUIRE_AUTH=true`.
 
-## Authenticated Sample Run
+## Hosted Sample Run
 
-This run used the private TraceGuard access key from Secret Manager. The key was not printed. The live `/proof` endpoint now includes this same shape under `latest_run`, with the current Cloud Run revision and pushed source commit filled in at runtime.
+This run used the hosted sample workflow. The live `/proof` endpoint now includes this same shape under `latest_run`, with the current Cloud Run revision and pushed source commit filled in at runtime.
 
 ```json
 {

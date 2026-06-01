@@ -707,14 +707,14 @@ class TraceGuardAgentTests(unittest.TestCase):
         self.assertIn(b'"mode": "improved"', result)
 
     def test_auth_sessions_are_signed_and_expire(self) -> None:
-        config = AuthConfig("correct horse battery staple", session_seconds=60)
+        config = AuthConfig("correct horse battery staple", session_seconds=60, require_token=True)
         session = issue_session(config, now=1_000, nonce="fixed")
         self.assertTrue(validate_session_cookie(f"{COOKIE_NAME}={session}", config, now=1_030))
         self.assertFalse(validate_session_cookie(f"{COOKIE_NAME}={session}", config, now=1_061))
         self.assertFalse(validate_session_cookie(f"{COOKIE_NAME}={session}tampered", config, now=1_030))
 
     def test_auth_token_compare_and_cookie_flags(self) -> None:
-        config = AuthConfig("demo-token", session_seconds=600)
+        config = AuthConfig("demo-token", session_seconds=600, require_token=True)
         session = issue_session(config, now=1_000, nonce="fixed")
         cookie = build_session_cookie(session, secure=True, max_age=config.session_seconds)
         self.assertTrue(verify_access_token("demo-token", config))

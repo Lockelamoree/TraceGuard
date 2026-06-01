@@ -23,7 +23,7 @@ class TraceGuardAuthServerTests(unittest.TestCase):
                 "ENABLE_GEMINI_SYNTHESIS": "",
                 "PHOENIX_API_KEY": "",
                 "PHOENIX_COLLECTOR_ENDPOINT": "",
-                "TRACEGUARD_REQUIRE_AUTH": "",
+                "TRACEGUARD_REQUIRE_AUTH": "true",
             },
         )
         self.env_patch.start()
@@ -52,6 +52,7 @@ class TraceGuardAuthServerTests(unittest.TestCase):
         self.assertEqual(self.request("/health")[0], 200)
         self.assertEqual(self.request("/healthz")[0], 200)
         self.assertEqual(self.request("/api/auth/status")[0], 200)
+        self.assertEqual(self.request("/api/samples")[0], 200)
         self.assertEqual(self.request("/proof")[0], 200)
         self.assertEqual(self.request("/api/runtime")[0], 401)
         self.assertEqual(self.request("/sample")[0], 401)
@@ -72,6 +73,23 @@ class TraceGuardAuthServerTests(unittest.TestCase):
         session_cookie = cookie.split(";", 1)[0]
         self.assertEqual(self.request("/api/runtime", headers={"Cookie": session_cookie})[0], 200)
         self.assertEqual(self.request("/api/runtime", headers={"Cookie": session_cookie + "x"})[0], 401)
+
+    def test_sample_manifest_and_bundle_selection(self) -> None:
+        status, _, manifest_body = self.request("/api/samples")
+        self.assertEqual(status, 200)
+        manifest = json.loads(manifest_body)
+        sample_ids = {item["id"] for item in manifest["samples"]}
+        self.assertIn("incident-response", sample_ids)
+        self.assertIn("storage-exfiltration", sample_ids)
+        self.assertIn("low-signal-control", sample_ids)
+
+        status, headers, _ = self.request("/api/auth/login", method="POST", body={"token": "local-test-token"})
+        self.assertEqual(status, 200)
+        session_cookie = headers["Set-Cookie"].split(";", 1)[0]
+        status, _, body = self.request("/sample?bundle=storage-exfiltration", headers={"Cookie": session_cookie})
+        self.assertEqual(status, 200)
+        self.assertIn("storage", body.lower())
+        self.assertEqual(self.request("/sample?bundle=unknown", headers={"Cookie": session_cookie})[0], 404)
 
     def test_public_proof_endpoint_exposes_only_safe_receipts(self) -> None:
         status, _, body = self.request("/proof")
@@ -131,6 +149,21 @@ class TraceGuardAuthServerTests(unittest.TestCase):
             login_status, _, login_body = self.request("/api/auth/login", method="POST", body={"token": "anything"})
             self.assertEqual(login_status, 503)
             self.assertIn("no access key is configured", login_body)
+
+    def test_routes_are_public_when_auth_is_not_configured(self) -> None:
+        with patch.dict(os.environ, {"TRACEGUARD_AUTH_TOKEN": "", "TRACEGUARD_REQUIRE_AUTH": ""}):
+            status, _, body = self.request("/api/auth/status")
+            self.assertEqual(status, 200)
+            self.assertIn('"enabled": false', body)
+            self.assertIn('"authenticated": true', body)
+            self.assertEqual(self.request("/api/runtime")[0], 200)
+            self.assertEqual(self.request("/sample?bundle=low-signal-control")[0], 200)
+            self.assertEqual(self.request("/api/analyze", method="POST", body={"evidence_text": "{}"})[0], 200)
+            status, _, proof_body = self.request("/proof")
+            self.assertEqual(status, 200)
+            payload = json.loads(proof_body)
+            self.assertEqual(payload["security_boundary"]["auth_enabled"], False)
+            self.assertEqual(payload["security_boundary"]["protected_routes"], [])
 
     def test_authenticated_analyze_rejects_cross_origin_posts(self) -> None:
         status, headers, _ = self.request("/api/auth/login", method="POST", body={"token": "local-test-token"})

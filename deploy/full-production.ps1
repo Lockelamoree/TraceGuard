@@ -11,6 +11,7 @@ param(
   [int]$PhoenixMcpTimeoutSeconds = 12,
   [string]$GeminiModel = "gemini-3-flash-preview",
   [int]$AuthSessionSeconds = 43200,
+  [switch]$RequireAuth,
   [int]$LocalVerifyPort = 18080,
   [switch]$SkipLocalVerify
 )
@@ -106,32 +107,34 @@ else {
   }
 }
 
-$existingAuthSecret = Invoke-Gcloud secrets list `
-  --filter "name:$AuthSecretName" `
-  --format "value(name)"
-$authSecretExists = [bool]$existingAuthSecret
+if ($RequireAuth) {
+  $existingAuthSecret = Invoke-Gcloud secrets list `
+    --filter "name:$AuthSecretName" `
+    --format "value(name)"
+  $authSecretExists = [bool]$existingAuthSecret
 
-if ($authSecretExists -and -not (Read-YesNo "Existing TraceGuard access key secret found. Add a new secret version?" $false)) {
-  Write-Host "Keeping existing TraceGuard access key secret."
-}
-else {
-  Write-Host ""
-  Write-Host "Paste a long TraceGuard access key when prompted. Judges use this to unlock the hosted demo."
-  $secureAuthToken = Read-Host "TraceGuard access key" -AsSecureString
-  $plainAuthToken = Convert-SecureStringToPlainText $secureAuthToken
-  try {
-    if (-not $plainAuthToken) {
-      throw "TraceGuard access key cannot be empty"
-    }
-    if ($authSecretExists) {
-      $plainAuthToken | & $dockerGcloud secrets versions add $AuthSecretName --data-file=-
-    }
-    else {
-      $plainAuthToken | & $dockerGcloud secrets create $AuthSecretName --data-file=-
-    }
+  if ($authSecretExists -and -not (Read-YesNo "Existing TraceGuard access key secret found. Add a new secret version?" $false)) {
+    Write-Host "Keeping existing TraceGuard access key secret."
   }
-  finally {
-    $plainAuthToken = $null
+  else {
+    Write-Host ""
+    Write-Host "Paste a long TraceGuard access key when prompted. It will unlock protected hosted runs."
+    $secureAuthToken = Read-Host "TraceGuard access key" -AsSecureString
+    $plainAuthToken = Convert-SecureStringToPlainText $secureAuthToken
+    try {
+      if (-not $plainAuthToken) {
+        throw "TraceGuard access key cannot be empty"
+      }
+      if ($authSecretExists) {
+        $plainAuthToken | & $dockerGcloud secrets versions add $AuthSecretName --data-file=-
+      }
+      else {
+        $plainAuthToken | & $dockerGcloud secrets create $AuthSecretName --data-file=-
+      }
+    }
+    finally {
+      $plainAuthToken = $null
+    }
   }
 }
 
@@ -148,5 +151,6 @@ else {
   -PhoenixMcpTimeoutSeconds $PhoenixMcpTimeoutSeconds `
   -GeminiModel $GeminiModel `
   -AuthSessionSeconds $AuthSessionSeconds `
+  -RequireAuth:$RequireAuth `
   -LocalVerifyPort $LocalVerifyPort `
   -SkipLocalVerify:$SkipLocalVerify

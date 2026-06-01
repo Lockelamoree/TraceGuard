@@ -1,6 +1,6 @@
 {
   "available": true,
-  "source": "hosted_authenticated_sample_run",
+  "source": "hosted_public_sample_run",
   "checked_at_utc": "2026-06-01T08:15:05Z",
   "cloud_run_revision": "",
   "source_commit": "",

@@ -8,7 +8,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from .agent import analyze_json
 from .auth import (
@@ -25,6 +25,27 @@ ROOT = Path(__file__).resolve().parent.parent
 WEB_ROOT = ROOT / "web"
 LATEST_RUN_RECEIPT_PATH = ROOT / "docs" / "latest-run-receipt.json"
 LATEST_RUN_CACHE_PATH = Path(os.getenv("TRACEGUARD_LATEST_RUN_PATH", "/tmp/traceguard-latest-run.json"))
+SAMPLE_BUNDLES = {
+    "incident-response": {
+        "label": "Incident response bundle",
+        "description": (
+            "Public Cloud Run access, primitive IAM, suspicious token activity, broad ingress, "
+            "and disabled repo controls."
+        ),
+        "file": "gcp_incident_bundle.txt",
+    },
+    "storage-exfiltration": {
+        "label": "Storage exfiltration bundle",
+        "description": "Cloud Storage exposure, suspicious data access, permissive IAM, and exfiltration-style alert text.",
+        "file": "gcp_storage_exfil_bundle.txt",
+    },
+    "low-signal-control": {
+        "label": "Low-signal control bundle",
+        "description": "A quieter control sample for checking that TraceGuard stays inconclusive when evidence is weak.",
+        "file": "gcp_low_signal_control_bundle.txt",
+    },
+}
+DEFAULT_SAMPLE_BUNDLE = "incident-response"
 PUBLIC_GET_PATHS = {
     "/",
     "/index.html",
@@ -35,6 +56,7 @@ PUBLIC_GET_PATHS = {
     "/healthz",
     "/proof",
     "/api/auth/status",
+    "/api/samples",
 }
 PUBLIC_POST_PATHS = {"/api/auth/login", "/api/auth/logout"}
 LOGIN_FAILURE_LIMIT = 8
@@ -56,7 +78,8 @@ class TraceGuardHandler(BaseHTTPRequestHandler):
         self._handle_get(send_body=False)
 
     def _handle_get(self, *, send_body: bool) -> None:
-        path = unquote(self.path.split("?", 1)[0])
+        parsed_url = urlparse(self.path)
+        path = unquote(parsed_url.path)
         if path in {"/health", "/healthz"}:
             self._send(200, b"ok", "text/plain", send_body=send_body)
             return
@@ -72,8 +95,15 @@ class TraceGuardHandler(BaseHTTPRequestHandler):
         if path == "/api/runtime":
             self._send_json(200, RuntimeConfig.from_env().public_status(), send_body=send_body)
             return
+        if path == "/api/samples":
+            self._send_json(200, {"samples": _sample_manifest()}, send_body=send_body)
+            return
         if path == "/sample":
-            self._send_file(ROOT / "samples" / "gcp_incident_bundle.txt", send_body=send_body)
+            sample_path = _sample_path(_requested_sample_bundle(parsed_url.query))
+            if sample_path is None:
+                self._send_json(404, {"error": "sample bundle not found"}, send_body=send_body)
+                return
+            self._send_file(sample_path, send_body=send_body)
             return
         if path == "/":
             self._send_file(WEB_ROOT / "index.html", send_body=send_body)
@@ -208,7 +238,7 @@ class TraceGuardHandler(BaseHTTPRequestHandler):
             "latest_run": _latest_run_receipt(),
             "security_boundary": {
                 "auth_enabled": auth.enabled,
-                "protected_routes": ["/sample", "/api/runtime", "/api/analyze"],
+                "protected_routes": ["/sample", "/api/runtime", "/api/analyze"] if auth.enabled else [],
                 "secrets_exposed": False,
             },
             "claim_boundary": (
@@ -349,6 +379,34 @@ def _record_latest_run_receipt(response_body: bytes) -> None:
         pass
 
 
+def _sample_manifest() -> list[dict[str, str]]:
+    return [
+        {
+            "id": sample_id,
+            "label": str(metadata["label"]),
+            "description": str(metadata["description"]),
+        }
+        for sample_id, metadata in SAMPLE_BUNDLES.items()
+    ]
+
+
+def _requested_sample_bundle(query: str) -> str:
+    values = parse_qs(query).get("bundle", [])
+    candidate = values[0] if values else DEFAULT_SAMPLE_BUNDLE
+    return candidate if candidate in SAMPLE_BUNDLES else ""
+
+
+def _sample_path(bundle: str) -> Path | None:
+    metadata = SAMPLE_BUNDLES.get(bundle)
+    if not metadata:
+        return None
+    sample_path = (ROOT / "samples" / str(metadata["file"])).resolve()
+    samples_root = (ROOT / "samples").resolve()
+    if sample_path.parent != samples_root:
+        return None
+    return sample_path
+
+
 def _latest_run_receipt() -> dict[str, object]:
     with _LATEST_RUN_LOCK:
         if _LATEST_RUN_RECEIPT:
@@ -375,9 +433,10 @@ def _sanitize_run_receipt(result: dict[str, object]) -> dict[str, object]:
     evidence = _list(result.get("evidence"))
     findings = _list(result.get("findings"))
     queried_tools = [str(item) for item in _list(mcp.get("queried_tool_names"))]
+    source = "runtime_authenticated_run" if auth_config_from_env().enabled else "runtime_public_run"
     return {
         "available": True,
-        "source": "runtime_authenticated_run",
+        "source": source,
         "checked_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "cloud_run_revision": os.getenv("K_REVISION", ""),
         "source_commit": os.getenv("TRACEGUARD_SOURCE_COMMIT", ""),
