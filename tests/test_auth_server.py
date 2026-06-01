@@ -109,6 +109,20 @@ class TraceGuardAuthServerTests(unittest.TestCase):
         self.assertNotIn("traceguard_auth_token", lowered)
         self.assertEqual(self.request("/proof", method="HEAD")[0], 200)
 
+    def test_proof_fallback_injects_current_deployment_metadata(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "K_REVISION": "traceguard-test-revision",
+                "TRACEGUARD_SOURCE_COMMIT": "abc123testcommit",
+            },
+        ):
+            status, _, body = self.request("/proof")
+        self.assertEqual(status, 200)
+        payload = json.loads(body)
+        self.assertEqual(payload["latest_run"]["cloud_run_revision"], "traceguard-test-revision")
+        self.assertEqual(payload["latest_run"]["source_commit"], "abc123testcommit")
+
     def test_failed_login_attempts_are_throttled(self) -> None:
         for _ in range(server_module.LOGIN_FAILURE_LIMIT - 1):
             self.assertEqual(self.request("/api/auth/login", method="POST", body={"token": "wrong"})[0], 401)

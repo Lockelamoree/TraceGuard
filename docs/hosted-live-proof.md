@@ -9,7 +9,8 @@ This is the sanitized proof bundle from the deployed Cloud Run build. It is mean
 - Cloud Run service: `traceguard`
 - Region: `us-central1`
 - Public URL: `https://traceguard-cnhtsa5yrq-uc.a.run.app`
-- Latest ready revision: exposed in `/proof` as `deployment.cloud_run_revision` and verified with Cloud Run service describe after deployment
+- Latest ready revision: `traceguard-00026-sbq`, exposed in `/proof` as `deployment.cloud_run_revision`
+- Source commit: `a94b761d2278fcf9751aef5b9a5788188d6586dd`
 - Traffic: `100%` to the latest ready revision
 
 ## Public Liveness
@@ -37,6 +38,9 @@ This run used the hosted sample workflow. The live `/proof` endpoint now include
 
 ```json
 {
+  "source": "runtime_public_run",
+  "cloud_run_revision": "traceguard-00026-sbq",
+  "source_commit": "a94b761d2278fcf9751aef5b9a5788188d6586dd",
   "evidence_items": 10,
   "findings": 11,
   "critical_or_high": 8,

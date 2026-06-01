@@ -410,18 +410,29 @@ def _sample_path(bundle: str) -> Path | None:
 def _latest_run_receipt() -> dict[str, object]:
     with _LATEST_RUN_LOCK:
         if _LATEST_RUN_RECEIPT:
-            return dict(_LATEST_RUN_RECEIPT)
+            return _with_runtime_receipt_metadata(_LATEST_RUN_RECEIPT)
     for path in (LATEST_RUN_CACHE_PATH, LATEST_RUN_RECEIPT_PATH):
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             continue
         if isinstance(payload, dict):
-            return payload
+            return _with_runtime_receipt_metadata(payload)
     return {
         "available": False,
         "detail": "No sanitized hosted run receipt has been recorded yet.",
     }
+
+
+def _with_runtime_receipt_metadata(receipt: dict[str, object]) -> dict[str, object]:
+    stamped = dict(receipt)
+    revision = os.getenv("K_REVISION", "")
+    source_commit = os.getenv("TRACEGUARD_SOURCE_COMMIT", "")
+    if revision:
+        stamped["cloud_run_revision"] = revision
+    if source_commit:
+        stamped["source_commit"] = source_commit
+    return stamped
 
 
 def _sanitize_run_receipt(result: dict[str, object]) -> dict[str, object]:
