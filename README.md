@@ -1,12 +1,16 @@
 # TraceGuard
 
-I built TraceGuard for the Arize track of the Google Cloud Rapid Agent Hackathon. The idea is simple: a cloud incident report should not sound confident unless the evidence backs it up.
+## Why I Built This
 
-TraceGuard takes a mixed evidence bundle - GCP audit logs, IAM policy JSON, Terraform snippets, alert text, and repository metadata - and turns it into a grounded security triage report. It calls out confirmed findings, confidence, impact, remediation, detection ideas, CWE references, and MITRE ATT&CK mappings. If the evidence is weak, it says so instead of manufacturing a clean bill of health.
+After a cloud incident, the hard part is not usually one missing log line. It is turning scattered evidence into a report that a security lead can trust quickly enough to act.
 
-The local version is intentionally easy to run. The hosted version is wired for the hackathon path: Cloud Run, optional Gemini synthesis through Vertex AI, Phoenix/OpenTelemetry spans, and a pinned Phoenix MCP command for read-only runtime introspection.
+The sample incident I use for TraceGuard looks like a real GCP cleanup problem: a Cloud Run service is publicly invokable through `allUsers`, a `temporary-admin@example.com` account has `roles/owner`, audit logs show suspicious token and IAM policy activity, Terraform leaves broad ingress open, and repo metadata says branch protection and secret scanning are disabled. Any one of those signals can be noisy. Together, they need evidence-backed triage, not a confident summary that forgets where its claims came from.
 
-## Judge Quickstart
+TraceGuard's gain is speed plus accountability. It takes a mixed evidence bundle - GCP audit logs, IAM policy JSON, Terraform snippets, alert text, and repository metadata - and turns it into a grounded security triage report with confirmed findings, confidence, impact, remediation, detection ideas, CWE references, and MITRE ATT&CK mappings. If the evidence is weak, it says so instead of manufacturing a clean bill of health.
+
+I built TraceGuard for the Arize track of the Google Cloud Rapid Agent Hackathon. The local version is intentionally easy to run. The hosted version is wired for Cloud Run, Gemini synthesis through Vertex AI, Phoenix/OpenTelemetry spans, and a pinned Phoenix MCP command for read-only runtime introspection.
+
+## Project Links
 
 Public project URL: https://traceguard-cnhtsa5yrq-uc.a.run.app
 
@@ -14,25 +18,9 @@ Public repository URL: https://github.com/Lockelamoree/TraceGuard
 
 Public proof endpoint: https://traceguard-cnhtsa5yrq-uc.a.run.app/proof
 
-## Judge Proof in 60 Seconds
+## Proof Snapshot
 
-If I only had one minute with a judge, I would start with the user: a cloud security lead gets scattered GCP evidence after an incident and needs a report they can trust. TraceGuard turns that pile into confirmed findings, eval scores, and a report where every confirmed claim cites source evidence.
-
-Then I would show this path:
-
-1. Open the hosted app and unlock it with the Devpost judge key.
-2. Click `Load sample`, then `Run agent`.
-3. Check the proof scoreboard in the run console:
-   - Findings: 11 on the deterministic sample.
-   - Critical/high findings: 8.
-   - Eval average: about 94% locally on the sample bundle.
-   - Unsupported confirmed claims: 0.
-   - Gemini validation: `pass` only when a live Gemini brief cites known evidence IDs; `not_run` when Gemini is disabled.
-   - Phoenix MCP: `ok`, `discovery_only`, `local_replay`, or the exact skipped/error state.
-   - Improvement plan: `observability_derived` when Phoenix MCP read queries complete, or `eval_guided_local` when running without Phoenix credentials.
-4. Open the final report preview and spot-check that every confirmed finding cites evidence IDs such as `iam-001`, `audit-003`, or `repo-line-065`, and that the observability improvement plan cites eval/MCP receipts.
-
-That is the point of the project: the UI should make the evidence boundary visible without asking anyone to trust a black box. Local mode is still useful, but it is not dressed up as live Gemini or live Phoenix. Management may ask for military-grade encryption; TraceGuard asks for receipts.
+The UI makes the evidence boundary visible without asking anyone to trust a black box. Local mode stays deterministic and labels Gemini or Phoenix as disabled/replay unless those integrations are actually configured. The hosted Cloud Run build shows live runtime receipts for Gemini, Phoenix OTEL, Phoenix MCP, eval quality, and unsupported confirmed claims.
 
 ![TraceGuard hosted Gemini 3 workbench](docs/screenshots/traceguard-hosted-gemini3-workbench.png)
 
@@ -46,27 +34,7 @@ Hosted Gemini 3 proof crops from the deployed Cloud Run build:
 
 ![TraceGuard hosted Gemini 3 report evidence](docs/screenshots/traceguard-hosted-gemini3-report-evidence.png)
 
-Sanitized live deployment proof is captured in [docs/hosted-live-proof.md](docs/hosted-live-proof.md). The hosted app also exposes a public, non-secret `/proof` JSON receipt for automated checks, including a sanitized `latest_run` receipt with Gemini validation, Phoenix MCP status, eval average, and unsupported-claim count. The demo video shotlist is in [docs/demo-video-shotlist.md](docs/demo-video-shotlist.md).
-
-Run locally:
-
-```powershell
-python -m traceguard.server --host 127.0.0.1 --port 8000
-```
-
-Open `http://127.0.0.1:8000`, click `Load sample`, then click `Run agent`.
-
-Expected local output:
-
-- Baseline: 9 findings, including 8 critical/high priority issues.
-- Improved: 11 findings, including 8 critical/high priority issues.
-- Improved-only coverage: `repo-control-gap`.
-- Severity change: public access findings move from high to critical.
-- Proof scoreboard: 0 unsupported confirmed claims and about 94% eval average on the included sample bundle.
-- Improvement plan: local runs use code eval receipts to recommend the next checklist/reporting change; hosted runs can show `observability_derived` when Phoenix MCP read queries complete.
-- Local runtime status: Gemini is disabled unless Google Cloud env vars are set; Phoenix/MCP show local replay unless Phoenix env vars are set.
-
-For the hosted demo, use the Devpost judge access key. After login, the runtime badges should make it clear whether Gemini, Phoenix OTEL, and Phoenix MCP are live or skipped/replay.
+Sanitized live deployment proof is captured in [docs/hosted-live-proof.md](docs/hosted-live-proof.md). The hosted app also exposes a public, non-secret `/proof` JSON receipt for automated checks, including a sanitized `latest_run` receipt with Gemini validation, Phoenix MCP status, eval average, and unsupported-claim count.
 
 Hosted liveness uses `/health` or `/api/auth/status`. The container also exposes `/healthz`, but Google Cloud Run reserves some public URL paths ending in `z`, so the exact hosted `/healthz` path can return a Google Frontend 404 before the request reaches TraceGuard.
 
@@ -76,7 +44,7 @@ This is the project at a glance. The important bit is that deterministic securit
 
 ```mermaid
 flowchart TD
-    reviewer["Security engineer / judge"] --> ui["TraceGuard web UI"]
+    reviewer["Security engineer"] --> ui["TraceGuard web UI"]
     ui --> evidence["Evidence bundle<br/>logs, IAM JSON, Terraform, alerts, repo metadata"]
     evidence --> parser["Parser<br/>traceguard/parsers.py"]
     parser --> triage["Deterministic triage<br/>traceguard/agent.py"]
@@ -103,7 +71,7 @@ I keep the full map in [PROJECT_VISUALIZATION.md](PROJECT_VISUALIZATION.md), inc
 
 ## Claims Matrix
 
-| Claim | Local deterministic demo | Hosted production path | Notes |
+| Claim | Local deterministic run | Hosted production path | Notes |
 | --- | --- | --- | --- |
 | Evidence parsing and deterministic findings | Confirmed | Confirmed after authenticated run | No cloud credentials required locally. |
 | Baseline vs improved delta | Confirmed | Confirmed after authenticated run | This build uses deterministic eval-guided replay, not autonomous online learning. |
@@ -111,20 +79,20 @@ I keep the full map in [PROJECT_VISUALIZATION.md](PROJECT_VISUALIZATION.md), inc
 | Gemini synthesis | Disabled by default | Requires `GOOGLE_CLOUD_PROJECT` and `ENABLE_GEMINI_SYNTHESIS=true` | Gemini summarizes deterministic findings; it does not create security facts. |
 | Phoenix OTEL tracing | Local replay by default | Requires `PHOENIX_API_KEY` or `PHOENIX_COLLECTOR_ENDPOINT` | Runtime badges distinguish live tracing from replay. |
 | Phoenix MCP integration | Local replay by default | Requires live tracing and `PHOENIX_MCP_COMMAND` | The live MCP path verifies `initialize` and `tools/list`, then attempts read-only `list-projects` and `list-traces` queries. |
-| ADK / Agent Platform surface | Importable when `google-adk` is installed | Same core triage logic exposed through `traceguard/adk_agent.py` | Cloud Run is the judge UI; `root_agent` is the Agent Builder / ADK surface. |
+| ADK / Agent Platform surface | Importable when `google-adk` is installed | Same core triage logic exposed through `traceguard/adk_agent.py` | Cloud Run is the hosted UI; `root_agent` is the Agent Builder / ADK surface. |
 | Public repo and license | This repository | This repository | MIT license included. |
 
 ## Why I Built It This Way
 
 - **Beyond chat:** The app parses evidence, runs security checks, scores findings, runs evals, and renders a report a human can use.
-- **Google Cloud path:** The judge-facing app is deployed on Cloud Run, and the repo exposes an ADK-compatible `root_agent` for Agent Builder / Agent Platform workflows over the same parser/scoring/eval core.
+- **Google Cloud path:** The hosted app is deployed on Cloud Run, and the repo exposes an ADK-compatible `root_agent` for Agent Builder / Agent Platform workflows over the same parser/scoring/eval core.
 - **Arize path:** I added Phoenix/OpenTelemetry hooks, runtime badges, a pinned Phoenix MCP stdio client, evals that check whether the report is grounded, and an improvement planner that turns the weakest eval plus MCP read-query receipts into a next-run change.
 - **Security workflow:** The point is not to replace a security engineer. It is to stop the report from mixing confirmed evidence with confident guesses.
-- **Honest demo boundary:** Local mode is deterministic and says when Gemini or Phoenix are not live. Nobody needs another dashboard-shaped illusion at 3am.
+- **Honest runtime boundary:** Local mode is deterministic and says when Gemini or Phoenix are not live. Nobody needs another dashboard-shaped illusion at 3am.
 
 ## Run Locally
 
-Requires Python 3.11 or newer. No third-party packages are required for the local deterministic demo.
+Requires Python 3.11 or newer. No third-party packages are required for the local deterministic run.
 
 ```powershell
 python -m traceguard.server --host 127.0.0.1 --port 8000
@@ -138,6 +106,16 @@ py -3.11 -m traceguard.server --host 127.0.0.1 --port 8000
 
 Open `http://127.0.0.1:8000`, load the sample bundle, and run both `Baseline` and `Run agent`.
 
+Expected sample result:
+
+- Baseline: 9 findings, including 8 critical/high priority issues.
+- Improved: 11 findings, including 8 critical/high priority issues.
+- Improved-only coverage: `repo-control-gap`.
+- Severity change: public access findings move from high to critical.
+- Proof scoreboard: 0 unsupported confirmed claims and about 94% eval average on the included sample bundle.
+- Improvement plan: local runs use code eval receipts to recommend the next checklist/reporting change; hosted runs can show `observability_derived` when Phoenix MCP read queries complete.
+- Local runtime status: Gemini is disabled unless Google Cloud env vars are set; Phoenix/MCP show local replay unless Phoenix env vars are set.
+
 ## Test
 
 ```powershell
@@ -149,19 +127,6 @@ Windows launcher equivalent:
 ```powershell
 py -3.11 -m unittest discover -s tests -p "test_*.py"
 ```
-
-## Demo Script
-
-1. Start the app and load the sample incident bundle.
-2. Run `Baseline` to show the first pass. It catches IAM risk, public exposure, suspicious token activity, broad ingress, and alert text.
-3. Run `Run agent` to show the improved pass. The delta should add `repo-control-gap`, promote public access risk, and produce an observability improvement plan.
-4. Walk through a few findings:
-   - Public Cloud Run invoker binding.
-   - Primitive `roles/owner` assignment.
-   - Suspicious `SetIamPolicy` and `GenerateAccessToken`.
-   - Broad `0.0.0.0/0` ingress.
-   - Disabled branch protection and secret scanning.
-5. Open the report preview or copy the final report. Each confirmed claim should cite evidence IDs.
 
 ## Cloud Run Deployment Shape
 
@@ -214,7 +179,7 @@ powershell.exe -ExecutionPolicy Bypass -File .\deploy\image-cloud-run.ps1 `
   -PhoenixCollectorEndpoint "https://app.phoenix.arize.com/s/your-space-name"
 ```
 
-Both `deploy\cloud-run.ps1` and `deploy\image-cloud-run.ps1` run `deploy\local-verify.ps1` before touching Cloud Run. The gate builds the container locally, runs the test suite inside that image, starts it on `127.0.0.1` with auth required, checks `/health`, confirms the judge proof UI/JS markers are present, logs in with a local verification token, and posts the sample bundle to `/api/analyze`. Production deploy stops if any of those checks fail.
+Both `deploy\cloud-run.ps1` and `deploy\image-cloud-run.ps1` run `deploy\local-verify.ps1` before touching Cloud Run. The gate builds the container locally, runs the test suite inside that image, starts it on `127.0.0.1` with auth required, checks `/health`, confirms the proof UI/JS markers are present, logs in with a local verification token, and posts the sample bundle to `/api/analyze`. Production deploy stops if any of those checks fail.
 
 The production deploy scripts also preserve an existing Cloud Run `PHOENIX_COLLECTOR_ENDPOINT` when the flag is omitted, reject the generic `https://app.phoenix.arize.com` root endpoint, and require a Phoenix space-specific URL such as `https://app.phoenix.arize.com/s/your-space-name` for new production deploys.
 
@@ -232,7 +197,7 @@ powershell.exe -ExecutionPolicy Bypass -File .\deploy\docker-gcloud.ps1 auth log
 
 The deploy script enables required APIs, creates a least-privilege runtime service account, grants Vertex AI access, grants Secret Manager access only to the Phoenix and TraceGuard auth secrets, and deploys Cloud Run with `PHOENIX_API_KEY` mounted from Secret Manager.
 
-It also mounts `TRACEGUARD_AUTH_TOKEN` from Secret Manager. Cloud Run remains unauthenticated at the platform layer so judges can reach the URL, but TraceGuard requires the access key before running the agent or reading demo evidence.
+It also mounts `TRACEGUARD_AUTH_TOKEN` from Secret Manager. Cloud Run remains unauthenticated at the platform layer so reviewers can reach the URL, but TraceGuard requires the access key before running the agent or reading sample evidence.
 
 ## Arize / Phoenix Integration Notes
 
@@ -242,9 +207,9 @@ The spans include run mode, evidence count/kinds, finding IDs/severities, eval s
 
 The live MCP path lives in `traceguard/phoenix_mcp.py`. When OTEL tracing is live and `PHOENIX_MCP_COMMAND` is configured, TraceGuard launches the Phoenix MCP server over stdio, sends a JSON-RPC `initialize`, performs `tools/list`, then attempts read-only Phoenix data queries through `list-projects` and `list-traces` when those tools are exposed. The API and UI report the MCP result as `ok`, `discovery_only`, `command_not_configured`, `tracing_not_ready`, `error`, or `local_replay`. The public runtime endpoint exposes only whether a command is configured, not the command value.
 
-In the UI, the Arize improvement loop is shown as `Observe -> Evaluate -> Improve`: Phoenix OTEL/MCP status proves the observability path, evals show grounding quality, and `traceguard/improvement.py` converts the weakest eval plus MCP read-query receipts into a next-run improvement. Local mode falls back to `eval_guided_local`; hosted mode can report `observability_derived` when Phoenix MCP completes read-only `list-projects` / `list-traces` queries. This is still an honest boundary: TraceGuard recommends the next checklist/reporting change from observability receipts, but it does not self-modify production code during a judge demo.
+In the UI, the Arize improvement loop is shown as `Observe -> Evaluate -> Improve`: Phoenix OTEL/MCP status proves the observability path, evals show grounding quality, and `traceguard/improvement.py` converts the weakest eval plus MCP read-query receipts into a next-run improvement. Local mode falls back to `eval_guided_local`; hosted mode can report `observability_derived` when Phoenix MCP completes read-only `list-projects` / `list-traces` queries. This is still an honest boundary: TraceGuard recommends the next checklist/reporting change from observability receipts, but it does not self-modify production code during a hosted run.
 
-For the hosted Cloud Run demo, the Docker image preinstalls the pinned MCP package. Use:
+For hosted Cloud Run, the Docker image preinstalls the pinned MCP package. Use:
 
 ```powershell
 PHOENIX_BASE_URL=https://app.phoenix.arize.com
@@ -265,7 +230,7 @@ Expected production instrumentation:
 
 ## Google Agent Builder / ADK Runtime Surface
 
-The deployed judge UI is a Cloud Run web runtime because it is easy to verify and keeps the security workflow inspectable. The agent surface for Google ADK / Agent Platform lives beside it in `traceguard/adk_agent.py`.
+The deployed hosted UI is a Cloud Run web runtime because it is easy to verify and keeps the security workflow inspectable. The agent surface for Google ADK / Agent Platform lives beside it in `traceguard/adk_agent.py`.
 
 That file exposes `root_agent`, a Google ADK `Agent` when `google-adk` is installed. The ADK agent uses Gemini as its model and has one mandatory tool: `triage_evidence_tool`. The tool runs the same deterministic parser, scoring, and eval pipeline used by the web app. The instruction tells Gemini to call the tool before making security claims, so Agent Builder/ADK orchestration can use Gemini without letting it invent findings.
 
@@ -274,7 +239,7 @@ The web app uses `traceguard/agent.py` for HTTP orchestration. For Google ADK or
 - `root_agent`: Google ADK agent object when `google-adk` is installed.
 - `triage_evidence_tool`: deterministic parser/scoring/eval tool used by the ADK agent.
 
-In the demo, I describe this as two entry points over the same core agent logic: Cloud Run for the hosted judge experience, and ADK `root_agent` for Google Agent Builder / Agent Platform orchestration.
+That gives two entry points over the same core agent logic: Cloud Run for the hosted web experience, and ADK `root_agent` for Google Agent Builder / Agent Platform orchestration.
 
 ## Repository Contents
 
@@ -294,4 +259,4 @@ TraceGuard does not claim exploitation or compromise without evidence. Findings 
 
 The hosted app has an app-level auth gate. When `TRACEGUARD_AUTH_TOKEN` is configured, the server denies `/sample`, `/api/runtime`, and `/api/analyze` until the browser presents a signed HttpOnly session cookie. The login screen is convenience; the backend check is the actual control.
 
-Repeated bad access-key attempts receive `429` responses, and authenticated `/api/analyze` requests reject cross-origin `Origin` / `Referer` values. For a long-lived production service, I would put Cloud Run behind IAM, IAP, or Cloud Armor instead of relying only on a shared demo key.
+Repeated bad access-key attempts receive `429` responses, and authenticated `/api/analyze` requests reject cross-origin `Origin` / `Referer` values. For a long-lived production service, I would put Cloud Run behind IAM, IAP, or Cloud Armor instead of relying only on a shared access key.
