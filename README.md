@@ -18,6 +18,10 @@ Public repository URL: https://github.com/Lockelamoree/TraceGuard
 
 Public proof endpoint: https://traceguard-cnhtsa5yrq-uc.a.run.app/proof
 
+Devpost submission: https://devpost.com/software/traceguard
+
+Demo video: https://youtu.be/rhSqZPX_qm8
+
 ## Proof Snapshot
 
 The UI makes the evidence boundary visible without asking anyone to trust a black box. Local mode stays deterministic and labels Gemini or Phoenix as disabled/replay unless those integrations are actually configured. The hosted Cloud Run build is public for judging, includes selectable sample bundles plus a guarded custom sample upload path, and shows live runtime receipts for Gemini, Phoenix OTEL, Phoenix MCP, eval quality, and unsupported confirmed claims.
@@ -34,7 +38,7 @@ Hosted Gemini 3 proof crops from the deployed Cloud Run build:
 
 ![TraceGuard hosted Gemini 3 report evidence](docs/screenshots/traceguard-hosted-gemini3-report-evidence.png)
 
-Sanitized live deployment proof is captured in [docs/hosted-live-proof.md](docs/hosted-live-proof.md). The hosted app also exposes a public, non-secret `/proof` JSON receipt for automated checks, including a sanitized `latest_run` receipt with Gemini validation, Phoenix MCP status, eval average, and unsupported-claim count. The compact judge-context receipt in the UI starts neutral and is populated from `/proof` or the current run result, so those values are runtime evidence, not hardcoded copy.
+Sanitized live deployment proof is captured in [docs/hosted-live-proof.md](docs/hosted-live-proof.md), and a focused Phoenix runtime receipt is captured in [docs/phoenix-runtime-proof.json](docs/phoenix-runtime-proof.json). The hosted app also exposes a public, non-secret `/proof` JSON receipt for automated checks, including a sanitized `latest_run` receipt with Gemini validation, Phoenix MCP status, eval average, and unsupported-claim count. The compact judge-context receipt in the UI starts neutral and is populated from `/proof` or the current run result, so those values are runtime evidence, not hardcoded copy.
 
 Hosted liveness uses `/health` or `/api/auth/status`. The container also exposes `/healthz`, but Google Cloud Run reserves some public URL paths ending in `z`, so the exact hosted `/healthz` path can return a Google Frontend 404 before the request reaches TraceGuard.
 
@@ -202,9 +206,9 @@ When `-RequireAuth` is passed, it also mounts `TRACEGUARD_AUTH_TOKEN` from Secre
 
 ## Arize / Phoenix Integration Notes
 
-The production tracing path lives in `traceguard/observability.py`. When `PHOENIX_API_KEY` or `PHOENIX_COLLECTOR_ENDPOINT` is configured, TraceGuard registers Phoenix OTEL tracing and emits spans for parsing, finding derivation, TraceGuard code evals, Gemini synthesis, Phoenix MCP introspection, improvement planning, and report generation.
+The production tracing path lives in `traceguard/observability.py`. When `PHOENIX_API_KEY` or `PHOENIX_COLLECTOR_ENDPOINT` is configured, TraceGuard registers Phoenix OTEL tracing and emits spans for parsing, finding derivation, TraceGuard code evals, Gemini synthesis, Phoenix MCP introspection, improvement planning, and report generation. The production dependency set includes `arize-phoenix-otel==0.16.1`, and the span attributes are written to be Phoenix/OpenInference-compatible for Arize review.
 
-The spans include run mode, evidence count/kinds, finding IDs/severities, eval scores/statuses, Gemini status, MCP status/tool count, improvement-plan source/status, and report length. Without Phoenix configuration, the app labels the output as local replay guidance instead of claiming live MCP trace queries.
+The spans include run mode, evidence count/kinds, finding IDs/severities, eval scores/statuses, Gemini status, MCP status/tool count, improvement-plan source/status, and report length. Phoenix/OpenTelemetry spans carry run metadata, eval scores, Gemini status, and MCP status; the latest proof receipt shows `observability_derived` from Phoenix MCP read queries plus code evals. Without Phoenix configuration, the app labels the output as local replay guidance instead of claiming live MCP trace queries.
 
 The live MCP path lives in `traceguard/phoenix_mcp.py`. When OTEL tracing is live and `PHOENIX_MCP_COMMAND` is configured, TraceGuard launches the Phoenix MCP server over stdio, sends a JSON-RPC `initialize`, performs `tools/list`, then attempts read-only Phoenix data queries through `list-projects` and `list-traces` when those tools are exposed. The API and UI report the MCP result as `ok`, `discovery_only`, `command_not_configured`, `tracing_not_ready`, `error`, or `local_replay`. The public runtime endpoint exposes only whether a command is configured, not the command value.
 

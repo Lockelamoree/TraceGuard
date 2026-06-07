@@ -4,7 +4,7 @@ This is the sanitized proof bundle from the deployed Cloud Run build. It is mean
 
 ## Deployment
 
-- Date checked: June 1, 2026
+- Date checked: June 7, 2026
 - Google Cloud project: `project-e66ee676-19c8-4beb-bcb`
 - Cloud Run service: `traceguard`
 - Region: `us-central1`
@@ -51,8 +51,10 @@ This run used the hosted sample workflow. The live `/proof` endpoint includes th
 ```json
 {
   "source": "runtime_public_run",
-  "cloud_run_revision": "<filled by /proof at runtime>",
-  "source_commit": "<filled by /proof at runtime>",
+  "checked_at_utc": "2026-06-07T17:47:11Z",
+  "cloud_run_revision": "traceguard-00030-9jx",
+  "source_commit": "0a7e5a75256291162dcc5945427960a53c19ad54",
+  "run_id": "fa999235-146c-4e62-93c4-72c6adea4cdf",
   "evidence_items": 10,
   "findings": 11,
   "critical_or_high": 8,
@@ -70,7 +72,9 @@ This run used the hosted sample workflow. The live `/proof` endpoint includes th
   "phoenix_mcp_tool_count": 27,
   "phoenix_mcp_queried_tools": ["list-traces"],
   "phoenix_mcp_queried_tool_count": 1,
-  "phoenix_mcp_query_error": ""
+  "phoenix_mcp_query_error": "",
+  "improvement_status": "observability_derived",
+  "improvement_source": "phoenix_mcp_read_queries+code_evals"
 }
 ```
 
@@ -80,4 +84,5 @@ Interpretation:
 - Gemini 3 Flash Preview is live through Vertex AI and the evidence-ID validator passed with zero rejected evidence references.
 - Phoenix/OpenTelemetry tracing is live for the `traceguard-hackathon` project.
 - Phoenix MCP initialized, discovered tools, and completed a read-only query path.
+- The focused Phoenix runtime receipt is captured in [phoenix-runtime-proof.json](phoenix-runtime-proof.json). It includes the public TraceGuard run ID and MCP query receipts, but does not expose Phoenix API keys, cookies, Secret Manager output, or a Phoenix UI trace ID.
 - The deterministic report remains the source of truth; unsupported Gemini narrative claims are rejected rather than promoted into confirmed findings.

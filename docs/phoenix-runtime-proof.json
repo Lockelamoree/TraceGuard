@@ -1,0 +1,33 @@
+{
+  "artifact": "TraceGuard sanitized Phoenix runtime proof",
+  "artifact_purpose": "Public, non-secret proof that the hosted run exposed Phoenix/OpenTelemetry, Phoenix MCP, eval, and improvement receipts.",
+  "source_endpoint": "https://traceguard-cnhtsa5yrq-uc.a.run.app/proof",
+  "captured_at_utc": "2026-06-07T17:47:11Z",
+  "cloud_run_revision": "traceguard-00030-9jx",
+  "source_commit": "0a7e5a75256291162dcc5945427960a53c19ad54",
+  "traceguard_run_id": "fa999235-146c-4e62-93c4-72c6adea4cdf",
+  "phoenix_trace_id_public": null,
+  "trace_id_note": "The public proof endpoint exposes TraceGuard's run_id and Phoenix MCP read-query status. It does not expose a Phoenix UI trace ID, Phoenix API key, cookies, or Secret Manager output.",
+  "phoenix_project": "traceguard-hackathon",
+  "phoenix_otel_ready": true,
+  "phoenix_enabled": true,
+  "phoenix_mcp_status": "ok",
+  "phoenix_mcp_server": "@arizeai/phoenix-mcp",
+  "phoenix_mcp_tool_count": 27,
+  "phoenix_mcp_queried_tools": [
+    "list-traces"
+  ],
+  "phoenix_mcp_resource_counts": {
+    "list-traces": 1
+  },
+  "eval_average": 0.94,
+  "unsupported_confirmed_claims": 0,
+  "gemini_provider": "Google Cloud Gemini on Vertex AI",
+  "gemini_model": "gemini-3-flash-preview",
+  "gemini_validation_status": "pass",
+  "gemini_rejected_claims": 0,
+  "improvement_status": "observability_derived",
+  "improvement_source": "phoenix_mcp_read_queries+code_evals",
+  "improvement_receipts": 5,
+  "claim_boundary": "TraceGuard reports live Gemini, Phoenix, and MCP only when the runtime result confirms those states. The improvement loop recommends a next-run change; it does not claim autonomous production self-modification."
+}

@@ -7,7 +7,10 @@ This is the checklist I use to prove what TraceGuard is actually doing. The goal
 - Hosted app: https://traceguard-cnhtsa5yrq-uc.a.run.app
 - Public repository: https://github.com/Lockelamoree/TraceGuard
 - Public proof endpoint: https://traceguard-cnhtsa5yrq-uc.a.run.app/proof
+- Devpost submission: https://devpost.com/software/traceguard
+- Demo video: https://youtu.be/rhSqZPX_qm8
 - Sanitized hosted live proof: [docs/hosted-live-proof.md](docs/hosted-live-proof.md)
+- Sanitized Phoenix runtime proof: [docs/phoenix-runtime-proof.json](docs/phoenix-runtime-proof.json)
 
 ## Local Verification
 
@@ -72,7 +75,7 @@ python -m unittest discover -s tests -p "test_*.py"
 
 Result: `42` tests passed. In my local Codex shell, `python` and `py -3.11` were not on PATH, so I ran the same command with the bundled Python runtime. That does not change the app requirement; a normal Python 3.11+ install can run the suite.
 
-Latest hosted verification I ran on June 1, 2026:
+Latest hosted verification I ran on June 7, 2026:
 
 - Cloud Run service describe reported revision `traceguard-00030-9jx` serving `100%` of traffic.
 - `/proof` reported source commit `0a7e5a75256291162dcc5945427960a53c19ad54`.
@@ -83,9 +86,9 @@ Latest hosted verification I ran on June 1, 2026:
 - Hosted HTML included the `Upload sample` control and custom file input.
 - Hosted JavaScript included the custom upload handler, maximum-size check, and likely-secret pattern checks.
 - Hosted HTML no longer hardcodes `94% eval avg` or `0 unsupported claims` in the judge-context receipt; hosted JavaScript includes `loadProofReceipt`, `updateJudgeReceiptFromProof`, and `updateJudgeReceiptFromResult`.
-- Public sample run returned `10` evidence items, `11` findings, `8` critical/high findings, `0` unsupported confirmed claims, `0.94` eval average, Gemini 3 validation `pass` with `0` rejected evidence references, Phoenix tracing ready, Phoenix MCP `ok`, `27` MCP tools, and one read-only `list-traces` query path.
+- Public sample run returned `source=runtime_public_run`, run ID `fa999235-146c-4e62-93c4-72c6adea4cdf`, `10` evidence items, `11` findings, `8` critical/high findings, `0` unsupported confirmed claims, `0.94` eval average, Gemini 3 validation `pass` with `0` rejected evidence references, Phoenix tracing ready, Phoenix MCP `ok`, `27` MCP tools, one read-only `list-traces` query path, and improvement status `observability_derived`.
 
-The sanitized proof is in [docs/hosted-live-proof.md](docs/hosted-live-proof.md).
+The sanitized proof is in [docs/hosted-live-proof.md](docs/hosted-live-proof.md), and the focused Phoenix runtime export is in [docs/phoenix-runtime-proof.json](docs/phoenix-runtime-proof.json). The public export includes the TraceGuard run ID and Phoenix MCP receipt status; it intentionally does not expose Phoenix API keys, cookies, Secret Manager values, or a Phoenix UI trace ID.
 
 ## Rubric Mapping
 
@@ -121,3 +124,5 @@ TraceGuard does not claim exploitation, compromise, Gemini synthesis, Phoenix tr
 Local mode is deterministic. It labels Phoenix output as replay guidance instead of implying live MCP trace queries.
 
 The current build demonstrates an eval-guided baseline/improved loop plus a dynamic improvement planner. TraceGuard runs the code evals. Phoenix/OpenTelemetry observes the run, and Phoenix MCP provides read-only trace/project receipts that can mark the plan `observability_derived`; without Phoenix credentials, it falls back to `eval_guided_local` and says so. TraceGuard recommends the next checklist/reporting change from receipts, but it does not self-modify production code during a judge run.
+
+Phoenix/OpenTelemetry spans carry run metadata, eval scores, Gemini status, and MCP status; the latest proof receipt shows `observability_derived` from Phoenix MCP read queries plus code evals. For Arize/OpenInference review, the production dependency set includes `arize-phoenix-otel==0.16.1`, and TraceGuard emits Phoenix/OpenInference-compatible OpenTelemetry span attributes from the code-owned Cloud Run runtime.
